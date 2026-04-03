@@ -8,6 +8,9 @@ export class KimiDriver extends BaseJsonlDriver {
 
   protected buildArgs(opts: SendOptions): string[] {
     const args = ['--print', '--prompt', opts.prompt, '--output-format', 'stream-json', '--work-dir', opts.workdir];
+    if (opts.model) {
+      args.push('--model', opts.model);
+    }
     if (opts.sessionId) {
       args.push('--resume', opts.sessionId);
     }

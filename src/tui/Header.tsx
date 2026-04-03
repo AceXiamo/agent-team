@@ -89,6 +89,7 @@ function AgentPill({ agent, uiBeat }: { agent: AgentState; uiBeat: number }): Re
             : 'ready';
   const extra = [
     agent.queueLength > 0 ? `q${agent.queueLength}` : null,
+    agent.model ? shortModel(agent.model) : null,
     agent.sessionId ? shortId(agent.sessionId) : null
   ].filter(Boolean).join(' • ');
 
@@ -109,6 +110,10 @@ function formatWorkdir(workdir: string): string {
 
 function shortId(value: string): string {
   return value.length > 12 ? `${value.slice(0, 6)}…` : value;
+}
+
+function shortModel(value: string): string {
+  return value.length > 16 ? `${value.slice(0, 13)}…` : value;
 }
 
 function getAgentColor(agent: AgentState): string {

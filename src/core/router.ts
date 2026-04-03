@@ -123,6 +123,16 @@ export class MessageRouter {
       return;
     }
 
+    if (parsed.type === 'models') {
+      this.listModels();
+      return;
+    }
+
+    if (parsed.type === 'agent_model') {
+      await this.setAgentModel(parsed.target, parsed.model);
+      return;
+    }
+
     if (parsed.type === 'new_session') {
       await this.createNewSession(parsed.title);
       return;
@@ -274,6 +284,7 @@ export class MessageRouter {
     for (const agent of AGENTS) {
       const state = this.state.agents[agent];
       state.sessionId = activeSession?.agentSessions[agent] ?? null;
+      state.model = workspaceSessions.agentModels[agent] ?? null;
       state.available = availability.find((item) => item.name === agent)?.available ?? false;
       state.enabled = workspaceSessions.agentEnabled[agent];
       this.syncAgentWorkState(agent);
@@ -328,7 +339,8 @@ export class MessageRouter {
           workdir: this.workdir,
           contextSummary
         }),
-        sessionId: agentState.sessionId ?? undefined
+        sessionId: agentState.sessionId ?? undefined,
+        model: agentState.model ?? undefined
       })) {
         switch (event.type) {
           case 'text': {
@@ -427,6 +439,43 @@ export class MessageRouter {
     });
 
     this.appendSystemMessage(`Workspace sessions:\n${lines.join('\n')}`, 'info');
+  }
+
+  private listModels(): void {
+    const lines = AGENTS.map((agent) => `  ${agent}: ${this.state.agents[agent].model ?? 'default'}`);
+    this.appendSystemMessage(`Workspace agent models:\n${lines.join('\n')}`, 'info');
+  }
+
+  private async setAgentModel(agent: AgentName, modelInput?: string): Promise<void> {
+    const state = this.state.agents[agent];
+    if (state.status === 'running' || state.queueLength > 0) {
+      this.appendSystemMessage(`Cannot change ${agent} model while it is running or has queued work.`, 'error');
+      return;
+    }
+
+    if (!modelInput) {
+      this.appendSystemMessage(`${agent} model for this workspace: ${state.model ?? 'default'}.`, 'info');
+      return;
+    }
+
+    const normalized = normalizeModelInput(modelInput);
+    if (state.model === normalized) {
+      this.appendSystemMessage(`${agent} is already using ${normalized ?? 'the default model'} for this workspace.`, 'info');
+      return;
+    }
+
+    state.model = normalized;
+    await this.sessionStore.setAgentModel(this.workdirHash, agent, normalized);
+
+    let resetLabel = '';
+    if (state.sessionId && this.state.activeSessionId) {
+      await this.sessionStore.clearAgentSession(this.workdirHash, this.state.activeSessionId, agent);
+      state.sessionId = null;
+      resetLabel = ' Cleared the bound session so the next run starts fresh under the new model.';
+    }
+
+    this.appendSystemMessage(`Set ${agent} model to ${normalized ?? 'the default model'} for this workspace.${resetLabel}`.trim(), 'info');
+    this.emit();
   }
 
   private async createNewSession(title?: string): Promise<void> {
@@ -841,4 +890,18 @@ function formatUsage(usage?: TokenUsage): string {
 
 function capitalizeAgent(agent: AgentName): string {
   return `${agent.slice(0, 1).toUpperCase()}${agent.slice(1)}`;
+}
+
+function normalizeModelInput(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const lowered = trimmed.toLowerCase();
+  if (lowered === 'default' || lowered === 'auto' || lowered === 'off' || lowered === 'clear' || lowered === 'none') {
+    return null;
+  }
+
+  return trimmed;
 }

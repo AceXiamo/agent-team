@@ -6,7 +6,9 @@ export type ParsedInput =
   | { type: 'send'; target: AgentName; prompt: string }
   | { type: 'reset'; target: AgentName }
   | { type: 'toggle_agent'; target: AgentName; enabled: boolean }
+  | { type: 'agent_model'; target: AgentName; model?: string }
   | { type: 'sessions' }
+  | { type: 'models' }
   | { type: 'new_session'; title?: string }
   | { type: 'switch_session'; sessionId: string }
   | { type: 'error'; message: string };
@@ -26,6 +28,14 @@ export function parseUserInput(input: string): ParsedInput {
 
   if (trimmed.startsWith('/agent') || trimmed.startsWith('/toggle')) {
     return parseToggleAgentCommand(trimmed);
+  }
+
+  if (trimmed === '/models') {
+    return { type: 'models' };
+  }
+
+  if (trimmed.startsWith('/model')) {
+    return parseModelCommand(trimmed);
   }
 
   if (trimmed === '/sessions') {
@@ -92,6 +102,24 @@ function parseToggleAgentCommand(input: string): ParsedInput {
     type: 'toggle_agent',
     target: agent,
     enabled: match[2].toLowerCase() === 'on'
+  };
+}
+
+function parseModelCommand(input: string): ParsedInput {
+  const match = input.match(/^\/model\s+@([A-Za-z]+)(?:\s+(.+))?\s*$/);
+  if (!match) {
+    return { type: 'error', message: 'Usage: /model @Claude <model|default>' };
+  }
+
+  const agent = match[1].toLowerCase();
+  if (!isAgentName(agent)) {
+    return { type: 'error', message: `Unknown target agent: @${match[1]}.` };
+  }
+
+  return {
+    type: 'agent_model',
+    target: agent,
+    model: match[2]?.trim() || undefined
   };
 }
 

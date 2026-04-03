@@ -31,11 +31,33 @@ describe('parseUserInput', () => {
     });
   });
 
+  it('parses models command', () => {
+    expect(parseUserInput('/models')).toEqual({
+      type: 'models'
+    });
+  });
+
   it('parses agent toggle command', () => {
     expect(parseUserInput('/agent @Claude off')).toEqual({
       type: 'toggle_agent',
       target: 'claude',
       enabled: false
+    });
+  });
+
+  it('parses agent model command', () => {
+    expect(parseUserInput('/model @Copilot gpt-5.2')).toEqual({
+      type: 'agent_model',
+      target: 'copilot',
+      model: 'gpt-5.2'
+    });
+  });
+
+  it('parses agent model query command', () => {
+    expect(parseUserInput('/model @Claude')).toEqual({
+      type: 'agent_model',
+      target: 'claude',
+      model: undefined
     });
   });
 

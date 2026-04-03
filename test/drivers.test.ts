@@ -18,6 +18,20 @@ describe('driver argument builders', () => {
     ]);
   });
 
+  it('builds claude args with model', () => {
+    const driver = new ClaudeDriver();
+    expect(readBuildArgs(driver, { prompt: 'hello', runId: 'run-1', workdir: '/tmp', model: 'sonnet' })).toEqual([
+      '-p',
+      'hello',
+      '--output-format',
+      'stream-json',
+      '--verbose',
+      '--dangerously-skip-permissions',
+      '--model',
+      'sonnet'
+    ]);
+  });
+
   it('builds codex resume args', () => {
     const driver = new CodexDriver();
     expect(
@@ -29,6 +43,21 @@ describe('driver argument builders', () => {
       'follow-up',
       '--json',
       '--dangerously-bypass-approvals-and-sandbox'
+    ]);
+  });
+
+  it('builds codex args with model', () => {
+    const driver = new CodexDriver();
+    expect(readBuildArgs(driver, { prompt: 'hello', runId: 'run-1', workdir: '/tmp', model: 'gpt-5.4' })).toEqual([
+      'exec',
+      'hello',
+      '--json',
+      '--dangerously-bypass-approvals-and-sandbox',
+      '--skip-git-repo-check',
+      '-C',
+      '/tmp',
+      '--model',
+      'gpt-5.4'
     ]);
   });
 
@@ -62,6 +91,21 @@ describe('driver argument builders', () => {
     ]);
   });
 
+  it('builds kimi args with model', () => {
+    const driver = new KimiDriver();
+    expect(readBuildArgs(driver, { prompt: 'hello', runId: 'run-1', workdir: '/tmp', model: 'kimi-k2' })).toEqual([
+      '--print',
+      '--prompt',
+      'hello',
+      '--output-format',
+      'stream-json',
+      '--work-dir',
+      '/tmp',
+      '--model',
+      'kimi-k2'
+    ]);
+  });
+
   it('builds copilot args', () => {
     const driver = new CopilotDriver();
     expect(readBuildArgs(driver, { prompt: 'hello', runId: 'run-1', workdir: '/tmp' })).toEqual([
@@ -90,6 +134,22 @@ describe('driver argument builders', () => {
       'off',
       '--no-color',
       '--resume=sess'
+    ]);
+  });
+
+  it('builds copilot args with model', () => {
+    const driver = new CopilotDriver();
+    expect(readBuildArgs(driver, { prompt: 'hello', runId: 'run-1', workdir: '/tmp', model: 'gpt-5.2' })).toEqual([
+      '--prompt',
+      'hello',
+      '--output-format',
+      'json',
+      '--allow-all',
+      '--stream',
+      'off',
+      '--no-color',
+      '--model',
+      'gpt-5.2'
     ]);
   });
 });

@@ -77,6 +77,7 @@ function KeyHints(): React.JSX.Element {
       <KeyBadge k="/new" desc="session" color="magenta" />
       <KeyBadge k="/sessions" desc="list" color="magenta" />
       <KeyBadge k="/reset" desc="agent" color="magenta" />
+      <KeyBadge k="/model" desc="llm" color="magenta" />
     </Box>
   );
 }

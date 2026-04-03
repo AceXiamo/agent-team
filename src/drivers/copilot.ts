@@ -27,6 +27,10 @@ export class CopilotDriver extends BaseJsonlDriver {
       args.push(`--resume=${opts.sessionId}`);
     }
 
+    if (opts.model) {
+      args.push('--model', opts.model);
+    }
+
     return args;
   }
 

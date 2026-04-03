@@ -13,7 +13,7 @@ export class CodexDriver extends BaseJsonlDriver {
 
   protected buildArgs(opts: SendOptions): string[] {
     if (opts.sessionId) {
-      return [
+      const args = [
         'exec',
         'resume',
         opts.sessionId,
@@ -21,9 +21,13 @@ export class CodexDriver extends BaseJsonlDriver {
         '--json',
         '--dangerously-bypass-approvals-and-sandbox'
       ];
+      if (opts.model) {
+        args.push('--model', opts.model);
+      }
+      return args;
     }
 
-    return [
+    const args = [
       'exec',
       opts.prompt,
       '--json',
@@ -32,6 +36,10 @@ export class CodexDriver extends BaseJsonlDriver {
       '-C',
       opts.workdir
     ];
+    if (opts.model) {
+      args.push('--model', opts.model);
+    }
+    return args;
   }
 
   protected override mapLine(record: Record<string, unknown>): AgentEvent[] {

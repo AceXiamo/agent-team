@@ -32,6 +32,7 @@ describe('persistence', () => {
     let sessions = await store.loadWorkspaceSessions('hash-1');
     expect(sessions.activeSessionId).toBe(second.id);
     expect(sessions.agentEnabled).toEqual({ claude: true, codex: true, kimi: true, copilot: true });
+    expect(sessions.agentModels).toEqual({});
     expect(sessions.sessions).toHaveLength(2);
 
     await store.switchSession('hash-1', first.id);
@@ -66,6 +67,7 @@ describe('persistence', () => {
     const sessions = await store.loadWorkspaceSessions('hash-1');
     expect(sessions.activeSessionId).toBe('session_migrated');
     expect(sessions.agentEnabled).toEqual({ claude: true, codex: true, kimi: true, copilot: true });
+    expect(sessions.agentModels).toEqual({});
     expect(sessions.sessions[0]?.agentSessions).toEqual({
       claude: 'legacy-claude',
       codex: 'legacy-codex'
@@ -82,6 +84,21 @@ describe('persistence', () => {
 
     const sessions = await store.loadWorkspaceSessions('hash-1');
     expect(sessions.agentEnabled).toEqual({ claude: false, codex: true, kimi: true, copilot: true });
+    expect(sessions.agentModels).toEqual({});
+  });
+
+  it('persists agent model overrides per workspace', async () => {
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-team-'));
+    tempDirs.push(baseDir);
+    const store = new SessionStore(baseDir);
+
+    await store.createSession('hash-1', 'Models');
+    await store.setAgentModel('hash-1', 'copilot', 'gpt-5.2');
+    await store.setAgentModel('hash-1', 'codex', 'gpt-5.4');
+    await store.setAgentModel('hash-1', 'codex', null);
+
+    const sessions = await store.loadWorkspaceSessions('hash-1');
+    expect(sessions.agentModels).toEqual({ copilot: 'gpt-5.2' });
   });
 
   it('persists messages as session-scoped jsonl', async () => {

@@ -105,6 +105,8 @@ npm run build && npm start
 | `/switch <id>` | 切换 session |
 | `/reset @Agent` | 清掉某个 Agent 的 session |
 | `/agent @Agent on\|off` | 开关某个 Agent |
+| `/model @Agent <model\|default>` | 设置或清掉某个 Agent 的模型覆盖 |
+| `/models` | 查看当前 workspace 的模型配置 |
 
 ### 快捷键
 

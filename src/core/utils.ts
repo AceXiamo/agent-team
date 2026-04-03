@@ -27,6 +27,7 @@ export function createEmptyAgentState(name: AgentName): AgentState {
   return {
     name,
     sessionId: null,
+    model: null,
     status: 'idle',
     available: false,
     enabled: true,

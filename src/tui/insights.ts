@@ -107,7 +107,7 @@ export function describeDraft(input: string, agents: Record<AgentName, AgentStat
     return {
       state: 'neutral',
       title: 'Ready for a new turn',
-      detail: 'Use @Agent to send work, or /sessions, /new, /switch, /reset to manage context.'
+      detail: 'Use @Agent to send work, or /sessions, /new, /switch, /reset, /model to manage context.'
     };
   }
 
@@ -115,7 +115,7 @@ export function describeDraft(input: string, agents: Record<AgentName, AgentStat
     return {
       state: 'neutral',
       title: 'Add one target agent',
-      detail: 'Messages require exactly one @Claude, @Codex, or @Kimi mention.'
+      detail: 'Messages require exactly one @Claude, @Codex, @Kimi, or @Copilot mention.'
     };
   }
 
@@ -126,7 +126,7 @@ export function describeDraft(input: string, agents: Record<AgentName, AgentStat
       return {
         state: agent.available && agent.enabled ? 'ready' : 'error',
         title: `Enter sends to ${senderLabel(parsed.target)}`,
-        detail: `${describeAgent(agent)} • ${parsed.prompt.length} chars • ${agent.sessionId ? 'resume session' : 'start fresh session'}`
+        detail: `${describeAgent(agent)} • model ${agent.model ?? 'default'} • ${parsed.prompt.length} chars • ${agent.sessionId ? 'resume session' : 'start fresh session'}`
       };
     }
     case 'sessions':
@@ -134,6 +134,22 @@ export function describeDraft(input: string, agents: Record<AgentName, AgentStat
         state: 'ready',
         title: 'Enter lists workspace sessions',
         detail: 'Use this when you need ids before switching or auditing previous work.'
+      };
+    case 'models':
+      return {
+        state: 'ready',
+        title: 'Enter lists workspace model overrides',
+        detail: 'Shows the current per-agent model setting. Agents without an override use their CLI default.'
+      };
+    case 'agent_model':
+      return {
+        state: 'ready',
+        title: parsed.model
+          ? `Enter sets ${senderLabel(parsed.target)} model`
+          : `Enter shows ${senderLabel(parsed.target)} model`,
+        detail: parsed.model
+          ? `Target model: ${parsed.model}. Use "default" to clear the override.`
+          : 'Shows the current model override for that agent in this workspace.'
       };
     case 'new_session':
       return {

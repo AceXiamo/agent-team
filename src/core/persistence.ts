@@ -35,6 +35,20 @@ export class SessionStore {
     });
   }
 
+  async setAgentModel(workdirHash: string, agent: AgentName, model: string | null): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const data = await readJson<Record<string, unknown>>(this.filePath, {});
+      const workspace = normalizeWorkspaceSessions(data[workdirHash]);
+      if (model) {
+        workspace.agentModels[agent] = model;
+      } else {
+        delete workspace.agentModels[agent];
+      }
+      data[workdirHash] = workspace;
+      await writeJson(this.filePath, data);
+    });
+  }
+
   async createSession(workdirHash: string, title?: string): Promise<SessionInfo> {
     let created!: SessionInfo;
 
@@ -181,16 +195,17 @@ function deserializeMessage(message: PersistedMessage): Message {
 
 function normalizeWorkspaceSessions(value: unknown): WorkspaceSessions {
   if (isWorkspaceSessions(value)) {
-    const candidate = value as WorkspaceSessions & { agentEnabled?: unknown };
+    const candidate = value as WorkspaceSessions & { agentEnabled?: unknown; agentModels?: unknown };
     return {
       activeSessionId: value.activeSessionId,
       agentEnabled: normalizeAgentEnabled(candidate.agentEnabled),
+      agentModels: normalizeAgentModels(candidate.agentModels),
       sessions: value.sessions.map(cloneSession)
     };
   }
 
   if (!value || typeof value !== 'object') {
-    return { activeSessionId: null, agentEnabled: defaultAgentEnabled(), sessions: [] };
+    return { activeSessionId: null, agentEnabled: defaultAgentEnabled(), agentModels: {}, sessions: [] };
   }
 
   const migratedAgentSessions: Partial<Record<AgentName, string>> = {};
@@ -202,7 +217,7 @@ function normalizeWorkspaceSessions(value: unknown): WorkspaceSessions {
   }
 
   if (Object.keys(migratedAgentSessions).length === 0) {
-    return { activeSessionId: null, agentEnabled: defaultAgentEnabled(), sessions: [] };
+    return { activeSessionId: null, agentEnabled: defaultAgentEnabled(), agentModels: {}, sessions: [] };
   }
 
   const now = new Date().toISOString();
@@ -217,6 +232,7 @@ function normalizeWorkspaceSessions(value: unknown): WorkspaceSessions {
   return {
     activeSessionId: session.id,
     agentEnabled: defaultAgentEnabled(),
+    agentModels: {},
     sessions: [session]
   };
 }
@@ -251,6 +267,22 @@ function normalizeAgentEnabled(value: unknown): Record<AgentName, boolean> {
 
   const candidate = value as Record<string, unknown>;
   return createAgentRecord((agent) => (typeof candidate[agent] === 'boolean' ? (candidate[agent] as boolean) : defaults[agent]));
+}
+
+function normalizeAgentModels(value: unknown): Partial<Record<AgentName, string>> {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const models: Partial<Record<AgentName, string>> = {};
+  for (const agent of AGENTS) {
+    const model = candidate[agent];
+    if (typeof model === 'string' && model.trim()) {
+      models[agent] = model.trim();
+    }
+  }
+  return models;
 }
 
 async function readJson<T>(filePath: string, fallback: T): Promise<T> {

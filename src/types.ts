@@ -6,6 +6,7 @@ export type CollaborationMode = 'user_request' | 'delegated_work' | 'review_hand
 export interface SendOptions {
   prompt: string;
   sessionId?: string;
+  model?: string;
   workdir: string;
   runId: string;
 }
@@ -91,6 +92,7 @@ export interface Message {
 export interface AgentState {
   name: AgentName;
   sessionId: string | null;
+  model: string | null;
   status: 'idle' | 'running' | 'error';
   available: boolean;
   enabled: boolean;
@@ -135,5 +137,6 @@ export interface SessionInfo {
 export interface WorkspaceSessions {
   activeSessionId: string | null;
   agentEnabled: Record<AgentName, boolean>;
+  agentModels: Partial<Record<AgentName, string>>;
   sessions: SessionInfo[];
 }

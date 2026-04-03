@@ -170,6 +170,33 @@ describe('MessageRouter', () => {
     await router.dispose();
   });
 
+  it('sets workspace model overrides and clears the bound session', async () => {
+    const { router, baseDir } = await createRouter({
+      codex: [
+        { type: 'text', content: 'first' },
+        { type: 'done', sessionId: 'codex-session' }
+      ]
+    });
+
+    await router.handleInput('@Codex one');
+    await waitForIdle(router);
+    expect(router.getState().agents.codex.sessionId).toBe('codex-session');
+
+    await router.handleInput('/model @Codex gpt-5.4');
+
+    const state = router.getState();
+    expect(state.agents.codex.model).toBe('gpt-5.4');
+    expect(state.agents.codex.sessionId).toBeNull();
+
+    const sessions = await new SessionStore(baseDir).loadWorkspaceSessions(hashWorkdir(testWorkdir()));
+    expect(sessions.agentModels).toEqual({ codex: 'gpt-5.4' });
+
+    await router.handleInput('/model @Codex default');
+    expect(router.getState().agents.codex.model).toBeNull();
+
+    await router.dispose();
+  });
+
   it('interrupts active work and clears queued tasks without exiting the app', async () => {
     const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-team-router-'));
     tempDirs.push(baseDir);
