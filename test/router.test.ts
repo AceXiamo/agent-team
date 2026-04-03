@@ -37,9 +37,11 @@ describe('MessageRouter', () => {
     expect(state.messages.some((message) => message.sender === 'claude')).toBe(true);
     expect(state.agents.codex.sessionId).toBe('codex-session');
     expect(state.agents.claude.sessionId).toBe('claude-session');
+    expect(state.activeSessionId).toBeTruthy();
 
-    const sessions = await new SessionStore(baseDir).load(hashWorkdir(testWorkdir()));
-    expect(sessions).toEqual({
+    const sessions = await new SessionStore(baseDir).loadWorkspaceSessions(hashWorkdir(testWorkdir()));
+    const active = sessions.sessions.find((session) => session.id === sessions.activeSessionId);
+    expect(active?.agentSessions).toEqual({
       codex: 'codex-session',
       claude: 'claude-session'
     });
@@ -94,6 +96,40 @@ describe('MessageRouter', () => {
 
     expect(second.getState().messages.length).toBeGreaterThan(0);
     await second.dispose();
+  });
+
+  it('creates and switches workspace sessions', async () => {
+    const { router } = await createRouter({
+      codex: [
+        { type: 'text', content: 'first session reply' },
+        { type: 'done', sessionId: 'codex-session-1' }
+      ],
+      codexExtra: [
+        { type: 'text', content: 'second session reply' },
+        { type: 'done', sessionId: 'codex-session-2' }
+      ]
+    });
+
+    await router.handleInput('@Codex first thread');
+    await waitForIdle(router);
+    const firstSessionId = router.getState().activeSessionId;
+    expect(firstSessionId).toBeTruthy();
+
+    await router.handleInput('/new Bug bash');
+    const secondSessionId = router.getState().activeSessionId;
+    expect(secondSessionId).toBeTruthy();
+    expect(secondSessionId).not.toBe(firstSessionId);
+
+    await router.handleInput('@Codex second thread');
+    await waitForIdle(router);
+    expect(router.getState().messages.some((message) => message.content.some((content) => content.type === 'text' && content.text.includes('second session reply')))).toBe(true);
+
+    await router.handleInput(`/switch ${firstSessionId}`);
+    expect(router.getState().activeSessionId).toBe(firstSessionId);
+    expect(router.getState().messages.some((message) => message.content.some((content) => content.type === 'text' && content.text.includes('first session reply')))).toBe(true);
+    expect(router.getState().messages.some((message) => message.content.some((content) => content.type === 'text' && content.text.includes('second session reply')))).toBe(false);
+
+    await router.dispose();
   });
 });
 

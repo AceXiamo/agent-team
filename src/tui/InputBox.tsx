@@ -21,7 +21,7 @@ export function InputBox({
   const hint =
     suggestions.length > 0
       ? `target preview: @${capitalize(activeSuggestion ?? suggestions[0]!)}`
-      : 'Enter sends • Tab completes mention • Empty Enter toggles focused tool details';
+      : 'Enter sends • /sessions • /new [title] • /switch <id> • Tab completes mention';
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1}>

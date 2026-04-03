@@ -89,7 +89,13 @@ export function App({ router }: AppProps): React.JSX.Element {
 
   return (
     <Box flexDirection="column">
-      <Header workdir={state.workdir} agents={state.agents} />
+      <Header
+        workdir={state.workdir}
+        agents={state.agents}
+        activeSessionId={state.activeSessionId}
+        activeSessionTitle={state.activeSessionTitle}
+        sessionCount={state.sessionCount}
+      />
       <MessageStream messages={state.messages} selectedMessageId={selectedMessageId} />
       <InputBox
         input={input}

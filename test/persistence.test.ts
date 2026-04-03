@@ -19,19 +19,58 @@ describe('persistence', () => {
     expect(hashWorkdir('/tmp/example')).toBe(hashWorkdir('/tmp/example'));
   });
 
-  it('stores and clears sessions by workdir', async () => {
+  it('creates and switches workspace sessions', async () => {
     const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-team-'));
     tempDirs.push(baseDir);
     const store = new SessionStore(baseDir);
 
-    await store.set('hash-1', 'claude', 'session-123');
-    expect(await store.load('hash-1')).toEqual({ claude: 'session-123' });
+    const first = await store.createSession('hash-1', 'Planning');
+    await store.bindAgentSession('hash-1', first.id, 'claude', 'claude-session-1');
+    const second = await store.createSession('hash-1', 'Implementation');
+    await store.bindAgentSession('hash-1', second.id, 'codex', 'codex-session-2');
+
+    let sessions = await store.loadWorkspaceSessions('hash-1');
+    expect(sessions.activeSessionId).toBe(second.id);
+    expect(sessions.sessions).toHaveLength(2);
+
+    await store.switchSession('hash-1', first.id);
+    sessions = await store.loadWorkspaceSessions('hash-1');
+    expect(sessions.activeSessionId).toBe(first.id);
+    expect(sessions.sessions[0]?.agentSessions.claude).toBe('claude-session-1');
+  });
+
+  it('clears agent driver session from the active workspace session', async () => {
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-team-'));
+    tempDirs.push(baseDir);
+    const store = new SessionStore(baseDir);
+
+    const session = await store.createSession('hash-1', 'Reset me');
+    await store.bindAgentSession('hash-1', session.id, 'claude', 'claude-session-1');
+    expect(await store.load('hash-1')).toEqual({ claude: 'claude-session-1' });
 
     await store.clear('hash-1', 'claude');
     expect(await store.load('hash-1')).toEqual({});
   });
 
-  it('persists messages as jsonl', async () => {
+  it('migrates legacy session format into a workspace session', async () => {
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-team-'));
+    tempDirs.push(baseDir);
+    await fs.writeFile(
+      path.join(baseDir, 'sessions.json'),
+      `${JSON.stringify({ 'hash-1': { claude: 'legacy-claude', codex: 'legacy-codex' } }, null, 2)}\n`,
+      'utf8'
+    );
+
+    const store = new SessionStore(baseDir);
+    const sessions = await store.loadWorkspaceSessions('hash-1');
+    expect(sessions.activeSessionId).toBe('session_migrated');
+    expect(sessions.sessions[0]?.agentSessions).toEqual({
+      claude: 'legacy-claude',
+      codex: 'legacy-codex'
+    });
+  });
+
+  it('persists messages as session-scoped jsonl', async () => {
     const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-team-'));
     tempDirs.push(baseDir);
     const store = new MessageLogStore(baseDir);
@@ -45,8 +84,10 @@ describe('persistence', () => {
       }
     ];
 
-    await store.save('hash-1', messages);
-    const loaded = await store.load('hash-1');
-    expect(loaded).toEqual(messages);
+    await store.save('hash-1', messages, 'session-a');
+    await store.save('hash-1', [], 'session-b');
+
+    expect(await store.load('hash-1', 'session-a')).toEqual(messages);
+    expect(await store.load('hash-1', 'session-b')).toEqual([]);
   });
 });

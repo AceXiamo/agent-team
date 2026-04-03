@@ -101,6 +101,9 @@ export interface AppState {
   messages: Message[];
   agents: Record<AgentName, AgentState>;
   workdir: string;
+  activeSessionId: string | null;
+  activeSessionTitle: string | null;
+  sessionCount: number;
 }
 
 export interface PersistedMessage {
@@ -115,4 +118,17 @@ export interface PersistedMessage {
 export interface DelegateRequest {
   target: AgentName;
   message: string;
+}
+
+export interface SessionInfo {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  agentSessions: Partial<Record<AgentName, string>>;
+}
+
+export interface WorkspaceSessions {
+  activeSessionId: string | null;
+  sessions: SessionInfo[];
 }

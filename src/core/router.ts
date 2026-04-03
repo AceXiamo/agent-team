@@ -5,7 +5,7 @@ import { MessageLogStore, SessionStore } from './persistence.js';
 import { createEmptyAgentState, createId, hashWorkdir, AGENTS } from './utils.js';
 import { DriverRegistry } from './registry.js';
 
-import type { AgentName, AppState, Message, MessageContent, Sender, TokenUsage } from '../types.js';
+import type { AgentName, AppState, Message, MessageContent, Sender, SessionInfo, TokenUsage } from '../types.js';
 
 interface PendingTask {
   runId: string;
@@ -19,6 +19,11 @@ interface RouterOptions {
   registry: DriverRegistry;
   sessionStore?: SessionStore;
   messageStore?: MessageLogStore;
+}
+
+interface PersistSnapshot {
+  sessionKey?: string;
+  messages: Message[];
 }
 
 type Listener = (state: AppState) => void;
@@ -39,6 +44,7 @@ export class MessageRouter {
 
   private persistTimer: NodeJS.Timeout | null = null;
   private persistPromise = Promise.resolve();
+  private pendingPersist: PersistSnapshot | null = null;
   private state: AppState;
 
   private constructor(options: RouterOptions) {
@@ -50,6 +56,9 @@ export class MessageRouter {
     this.state = {
       workdir: options.workdir,
       messages: [],
+      activeSessionId: null,
+      activeSessionTitle: null,
+      sessionCount: 0,
       agents: {
         claude: createEmptyAgentState('claude'),
         codex: createEmptyAgentState('codex'),
@@ -84,6 +93,21 @@ export class MessageRouter {
       return;
     }
 
+    if (parsed.type === 'sessions') {
+      await this.listSessions();
+      return;
+    }
+
+    if (parsed.type === 'new_session') {
+      await this.createNewSession(parsed.title);
+      return;
+    }
+
+    if (parsed.type === 'switch_session') {
+      await this.switchSession(parsed.sessionId);
+      return;
+    }
+
     if (parsed.type === 'reset') {
       await this.resetAgent(parsed.target);
       return;
@@ -94,6 +118,8 @@ export class MessageRouter {
       this.appendSystemMessage(`${parsed.target} is unavailable on this machine.`, 'error');
       return;
     }
+
+    await this.ensureActiveSession();
 
     this.appendMessage({
       id: createId('msg'),
@@ -124,9 +150,12 @@ export class MessageRouter {
     state.status = 'idle';
     state.lastError = null;
     state.sessionId = null;
-    await this.sessionStore.clear(this.workdirHash, agent);
 
-    this.appendSystemMessage(`Reset ${agent} session and cleared its pending queue.`, 'info');
+    if (this.state.activeSessionId) {
+      await this.sessionStore.clearAgentSession(this.workdirHash, this.state.activeSessionId, agent);
+    }
+
+    this.appendSystemMessage(`Reset ${agent} session for the current workspace session and cleared its pending queue.`, 'info');
     this.emit();
   }
 
@@ -158,9 +187,8 @@ export class MessageRouter {
   }
 
   private async initialize(): Promise<void> {
-    const [savedSessions, savedMessages, availability] = await Promise.all([
-      this.sessionStore.load(this.workdirHash),
-      this.messageStore.load(this.workdirHash),
+    const [workspaceSessions, availability] = await Promise.all([
+      this.sessionStore.loadWorkspaceSessions(this.workdirHash),
       Promise.all(
         this.registry.values().map(async (driver) => ({
           name: driver.name,
@@ -169,11 +197,15 @@ export class MessageRouter {
       )
     ]);
 
-    this.state.messages = savedMessages;
+    const activeSession = workspaceSessions.sessions.find((session) => session.id === workspaceSessions.activeSessionId) ?? null;
+    this.state.messages = await this.loadMessagesForSession(activeSession?.id);
+    this.state.activeSessionId = activeSession?.id ?? null;
+    this.state.activeSessionTitle = activeSession?.title ?? null;
+    this.state.sessionCount = workspaceSessions.sessions.length;
 
     for (const agent of AGENTS) {
       const state = this.state.agents[agent];
-      state.sessionId = savedSessions[agent] ?? null;
+      state.sessionId = activeSession?.agentSessions[agent] ?? null;
       state.available = availability.find((item) => item.name === agent)?.available ?? false;
     }
 
@@ -197,6 +229,7 @@ export class MessageRouter {
     const agentState = this.state.agents[task.target];
     const message = this.createStreamingAgentMessage(task.target);
     const parser = new DelegationParser();
+    const sessionKey = this.state.activeSessionId;
     let lastError: string | null = null;
 
     agentState.status = 'running';
@@ -251,7 +284,9 @@ export class MessageRouter {
             break;
           case 'done':
             agentState.sessionId = event.sessionId;
-            await this.sessionStore.set(this.workdirHash, task.target, event.sessionId);
+            if (sessionKey) {
+              await this.sessionStore.bindAgentSession(this.workdirHash, sessionKey, task.target, event.sessionId);
+            }
             break;
           case 'error':
             lastError = event.message;
@@ -286,6 +321,54 @@ export class MessageRouter {
     }
 
     await this.startTask(next);
+  }
+
+  private async listSessions(): Promise<void> {
+    const workspaceSessions = await this.sessionStore.loadWorkspaceSessions(this.workdirHash);
+    if (workspaceSessions.sessions.length === 0) {
+      this.appendSystemMessage('No workspace sessions found. Use `/new [title]` to start one.', 'info');
+      return;
+    }
+
+    const lines = workspaceSessions.sessions.map((session) => {
+      const marker = session.id === workspaceSessions.activeSessionId ? ' (active)' : '';
+      const agents = AGENTS.filter((agent) => session.agentSessions[agent]).join(', ') || 'no agents yet';
+      return `  ${session.id}${marker} - ${session.title} [${agents}]`;
+    });
+
+    this.appendSystemMessage(`Workspace sessions:\n${lines.join('\n')}`, 'info');
+  }
+
+  private async createNewSession(title?: string): Promise<void> {
+    if (Object.values(this.state.agents).some((agent) => agent.status === 'running')) {
+      this.appendSystemMessage('Cannot create a new session while an agent is running.', 'error');
+      return;
+    }
+
+    await this.flushPersist();
+    const created = await this.sessionStore.createSession(this.workdirHash, title);
+    this.applyActiveSession(created, [], this.state.sessionCount + 1);
+    this.emit();
+    this.appendSystemMessage(`Created session ${created.id}${title ? `: ${created.title}` : ''}.`, 'info');
+  }
+
+  private async switchSession(sessionId: string): Promise<void> {
+    if (Object.values(this.state.agents).some((agent) => agent.status === 'running')) {
+      this.appendSystemMessage('Cannot switch sessions while an agent is running.', 'error');
+      return;
+    }
+
+    await this.flushPersist();
+    const session = await this.sessionStore.switchSession(this.workdirHash, sessionId);
+    if (!session) {
+      this.appendSystemMessage(`Session ${sessionId} not found.`, 'error');
+      return;
+    }
+
+    const messages = await this.loadMessagesForSession(session.id);
+    this.applyActiveSession(session, messages, this.state.sessionCount);
+    this.emit();
+    this.appendSystemMessage(`Switched to session ${session.title} (${session.id}).`, 'info');
   }
 
   private handleDelegateRequest(source: AgentName, target: AgentName, message: string): void {
@@ -420,9 +503,15 @@ export class MessageRouter {
   }
 
   private schedulePersist(): void {
+    this.pendingPersist = {
+      sessionKey: this.state.activeSessionId ?? undefined,
+      messages: structuredClone(this.state.messages)
+    };
+
     if (this.persistTimer) {
       clearTimeout(this.persistTimer);
     }
+
     this.persistTimer = setTimeout(() => {
       void this.flushPersist();
     }, 25);
@@ -434,9 +523,49 @@ export class MessageRouter {
       this.persistTimer = null;
     }
 
+    const snapshot = this.pendingPersist;
+    if (!snapshot) {
+      return;
+    }
+
+    this.pendingPersist = null;
     this.persistPromise = this.persistPromise.then(() =>
-      this.messageStore.save(this.workdirHash, this.state.messages)
+      this.messageStore.save(this.workdirHash, snapshot.messages, snapshot.sessionKey)
     );
     await this.persistPromise;
+  }
+
+  private async ensureActiveSession(): Promise<void> {
+    if (this.state.activeSessionId) {
+      return;
+    }
+
+    const created = await this.sessionStore.createSession(this.workdirHash);
+    this.applyActiveSession(created, [], this.state.sessionCount + 1);
+    this.emit();
+  }
+
+  private applyActiveSession(session: SessionInfo, messages: Message[], sessionCount: number): void {
+    this.state.messages = messages;
+    this.state.activeSessionId = session.id;
+    this.state.activeSessionTitle = session.title;
+    this.state.sessionCount = sessionCount;
+
+    for (const agent of AGENTS) {
+      this.state.agents[agent].sessionId = session.agentSessions[agent] ?? null;
+    }
+  }
+
+  private async loadMessagesForSession(sessionId?: string): Promise<Message[]> {
+    if (!sessionId) {
+      return [];
+    }
+
+    const messages = await this.messageStore.load(this.workdirHash, sessionId);
+    if (messages.length > 0 || sessionId !== 'session_migrated') {
+      return messages;
+    }
+
+    return this.messageStore.load(this.workdirHash);
   }
 }

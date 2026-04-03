@@ -9,9 +9,12 @@ import { senderLabel } from '../core/utils.js';
 interface HeaderProps {
   workdir: string;
   agents: Record<'claude' | 'codex' | 'kimi', AgentState>;
+  activeSessionId: string | null;
+  activeSessionTitle: string | null;
+  sessionCount: number;
 }
 
-export function Header({ workdir, agents }: HeaderProps): React.JSX.Element {
+export function Header({ workdir, agents, activeSessionId, activeSessionTitle, sessionCount }: HeaderProps): React.JSX.Element {
   const entries = Object.values(agents);
   const runningCount = entries.filter((agent) => agent.status === 'running').length;
   const queuedCount = entries.reduce((sum, agent) => sum + agent.queueLength, 0);
@@ -32,13 +35,21 @@ export function Header({ workdir, agents }: HeaderProps): React.JSX.Element {
         <Text bold>{formatWorkdir(workdir)}</Text>
         <Text dimColor>{`  (${workdir})`}</Text>
       </Text>
+      <Text>
+        <Text color="gray">session </Text>
+        <Text bold>{activeSessionTitle ?? 'none selected'}</Text>
+        <Text dimColor>
+          {activeSessionId ? `  (${shortId(activeSessionId)})` : '  use /new to start'}
+        </Text>
+        <Text dimColor>{`  • ${sessionCount} total`}</Text>
+      </Text>
       <Box gap={2} flexWrap="wrap">
         {entries.map((agent) => (
           <AgentChip key={agent.name} agent={agent} />
         ))}
       </Box>
       <Text dimColor>
-        {runningCount > 0 ? `${runningCount} running` : 'idle'} • {queuedCount > 0 ? `${queuedCount} queued` : 'queue clear'} • Tab mention • ↑↓ focus • Enter send/toggle
+        {`${runningCount > 0 ? `${runningCount} running` : 'idle'} • ${queuedCount > 0 ? `${queuedCount} queued` : 'queue clear'} • /sessions • /new • /switch <id> • Tab mention • ↑↓ focus • Enter send/toggle`}
       </Text>
     </Box>
   );
@@ -58,8 +69,8 @@ function AgentChip({ agent }: { agent: AgentState }): React.JSX.Element {
     : agent.queueLength > 0
       ? `queue ${agent.queueLength}`
       : agent.sessionId
-        ? 'session warm'
-        : 'fresh session';
+        ? `driver ${shortId(agent.sessionId)}`
+        : 'new driver session';
 
   return (
     <Box>
@@ -75,6 +86,10 @@ function formatWorkdir(workdir: string): string {
   const base = path.basename(workdir);
   const parent = path.basename(path.dirname(workdir));
   return `${parent}/${base}`;
+}
+
+function shortId(value: string): string {
+  return value.length > 12 ? `${value.slice(0, 8)}...` : value;
 }
 
 function getAgentColor(agent: AgentState): string {

@@ -5,6 +5,9 @@ import type { AgentName } from '../types.js';
 export type ParsedInput =
   | { type: 'send'; target: AgentName; prompt: string }
   | { type: 'reset'; target: AgentName }
+  | { type: 'sessions' }
+  | { type: 'new_session'; title?: string }
+  | { type: 'switch_session'; sessionId: string }
   | { type: 'error'; message: string };
 
 const AGENT_PATTERN = /@([A-Za-z]+)/g;
@@ -18,6 +21,18 @@ export function parseUserInput(input: string): ParsedInput {
 
   if (trimmed.startsWith('/reset')) {
     return parseResetCommand(trimmed);
+  }
+
+  if (trimmed === '/sessions') {
+    return { type: 'sessions' };
+  }
+
+  if (trimmed.startsWith('/new')) {
+    return parseNewSessionCommand(trimmed);
+  }
+
+  if (trimmed.startsWith('/switch')) {
+    return parseSwitchSessionCommand(trimmed);
   }
 
   const mentions = [...trimmed.matchAll(AGENT_PATTERN)];
@@ -73,4 +88,28 @@ export function extractMentionCandidates(input: string): AgentName[] {
 
 function isAgentName(value: string): value is AgentName {
   return AGENTS.includes(value as AgentName);
+}
+
+function parseNewSessionCommand(input: string): ParsedInput {
+  const match = input.match(/^\/new(?:\s+(.+))?\s*$/);
+  if (!match) {
+    return { type: 'error', message: 'Usage: /new [title]' };
+  }
+
+  return {
+    type: 'new_session',
+    title: match[1]?.trim() || undefined
+  };
+}
+
+function parseSwitchSessionCommand(input: string): ParsedInput {
+  const match = input.match(/^\/switch\s+(\S+)\s*$/);
+  if (!match) {
+    return { type: 'error', message: 'Usage: /switch <sessionId>' };
+  }
+
+  return {
+    type: 'switch_session',
+    sessionId: match[1]
+  };
 }

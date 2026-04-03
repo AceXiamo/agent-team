@@ -24,6 +24,33 @@ describe('parseUserInput', () => {
       target: 'claude'
     });
   });
+
+  it('parses sessions command', () => {
+    expect(parseUserInput('/sessions')).toEqual({
+      type: 'sessions'
+    });
+  });
+
+  it('parses new session command with title', () => {
+    expect(parseUserInput('/new review flow')).toEqual({
+      type: 'new_session',
+      title: 'review flow'
+    });
+  });
+
+  it('parses new session command without title', () => {
+    expect(parseUserInput('/new')).toEqual({
+      type: 'new_session',
+      title: undefined
+    });
+  });
+
+  it('parses switch session command', () => {
+    expect(parseUserInput('/switch session_abc')).toEqual({
+      type: 'switch_session',
+      sessionId: 'session_abc'
+    });
+  });
 });
 
 describe('extractMentionCandidates', () => {
