@@ -1,8 +1,8 @@
-import { buildAgentPrompt } from './prompt.js';
+import { buildAgentPrompt, buildContextSummary } from './prompt.js';
 import { parseUserInput } from './commandParser.js';
 import { DelegationParser } from './delegation.js';
 import { MessageLogStore, SessionStore } from './persistence.js';
-import { createEmptyAgentState, createId, hashWorkdir, AGENTS } from './utils.js';
+import { createEmptyAgentState, createId, hashWorkdir, summarizeText, AGENTS } from './utils.js';
 import { DriverRegistry } from './registry.js';
 
 import type { AgentName, AppState, Message, MessageContent, Sender, SessionInfo, TokenUsage } from '../types.js';
@@ -319,6 +319,11 @@ export class MessageRouter {
 
     this.appendMessage(message);
 
+    const contextSummary = buildContextSummary({
+      target: task.target,
+      messages: this.state.messages
+    });
+
     try {
       for await (const event of driver.send({
         runId: task.runId,
@@ -328,7 +333,8 @@ export class MessageRouter {
           source: task.source,
           mode: task.mode,
           body: task.prompt,
-          workdir: this.workdir
+          workdir: this.workdir,
+          contextSummary
         }),
         sessionId: agentState.sessionId ?? undefined
       })) {
@@ -824,15 +830,6 @@ function summarizeValue(value: unknown): string {
   }
 
   return String(value);
-}
-
-function summarizeText(value: string, limit: number): string {
-  const singleLine = value.replace(/\s+/g, ' ').trim();
-  if (!singleLine) {
-    return '';
-  }
-
-  return singleLine.length > limit ? `${singleLine.slice(0, limit - 3)}...` : singleLine;
 }
 
 function formatUsage(usage?: TokenUsage): string {

@@ -1,5 +1,9 @@
-import type { AgentName, CollaborationMode, Sender } from '../types.js';
-import { AGENT_LABELS } from './utils.js';
+import type { AgentName, CollaborationMode, Message, Sender } from '../types.js';
+import { AGENT_LABELS, summarizeText } from './utils.js';
+
+const DEFAULT_SUMMARY_MAX_CHARS = 2000;
+const AGENT_TEXT_LIMIT = 300;
+const TOOL_LIST_LIMIT = 120;
 
 interface PromptOptions {
   target: AgentName;
@@ -7,12 +11,13 @@ interface PromptOptions {
   body: string;
   workdir: string;
   mode: CollaborationMode;
+  contextSummary?: string | null;
 }
 
 export function buildAgentPrompt(options: PromptOptions): string {
   const sourceLabel = options.source === 'human' ? 'Human user' : options.source === 'system' ? 'System' : AGENT_LABELS[options.source];
 
-  return [
+  const lines = [
     `You are ${AGENT_LABELS[options.target]} participating in the local "agent-team" CLI.`,
     'Respond in normal prose unless you intentionally delegate.',
     '',
@@ -32,10 +37,132 @@ export function buildAgentPrompt(options: PromptOptions): string {
     '',
     `Workspace: ${options.workdir}`,
     `Incoming sender: ${sourceLabel}`,
-    '',
-    'Incoming message:',
-    options.body
-  ].join('\n');
+    ''
+  ];
+
+  if (options.contextSummary) {
+    lines.push(
+      'Recent activity from other participants (while you were idle):',
+      '---',
+      options.contextSummary,
+      '---',
+      'Use this context to stay informed, but focus on the incoming message.',
+      ''
+    );
+  }
+
+  lines.push('Incoming message:', options.body);
+  return lines.join('\n');
+}
+
+// --- Context summary ---
+
+interface ContextSummaryOptions {
+  target: AgentName;
+  messages: Message[];
+  maxChars?: number;
+}
+
+export function buildContextSummary(options: ContextSummaryOptions): string | null {
+  const { target, messages, maxChars = DEFAULT_SUMMARY_MAX_CHARS } = options;
+
+  const lastTargetIndex = findLastIndex(messages, (m) => m.sender === target);
+  const startIndex = lastTargetIndex === -1 ? 0 : lastTargetIndex + 1;
+
+  const summaryLines: string[] = [];
+  for (let i = startIndex; i < messages.length; i++) {
+    const msg = messages[i];
+    if (msg.sender === target) {
+      continue;
+    }
+    const line = summarizeMessage(msg);
+    if (line) {
+      summaryLines.push(line);
+    }
+  }
+
+  if (summaryLines.length === 0) {
+    return null;
+  }
+
+  return truncateFromHead(summaryLines, maxChars);
+}
+
+function summarizeMessage(message: Message): string | null {
+  const { sender } = message;
+
+  if (sender === 'system') {
+    return summarizeSystemMessage(message);
+  }
+
+  const label = sender === 'human' ? 'Human' : AGENT_LABELS[sender as AgentName] ?? sender;
+  const parts: string[] = [];
+
+  for (const block of message.content) {
+    switch (block.type) {
+      case 'text': {
+        const text = sender === 'human'
+          ? block.text.trim()
+          : summarizeText(block.text, AGENT_TEXT_LIMIT);
+        if (text) {
+          parts.push(text);
+        }
+        break;
+      }
+      case 'tool_use':
+        parts.push(`[tool: ${block.tool}]`);
+        break;
+      case 'delegate':
+        parts.push(`[delegated to ${block.target}: ${summarizeText(block.message, TOOL_LIST_LIMIT)}]`);
+        break;
+      // skip thinking, tool_result, system within agent messages
+    }
+  }
+
+  if (parts.length === 0) {
+    return null;
+  }
+
+  return `[${label}] ${parts.join(' ')}`;
+}
+
+function summarizeSystemMessage(message: Message): string | null {
+  for (const block of message.content) {
+    if (block.type === 'delegate') {
+      return `[System] ${summarizeText(block.message, AGENT_TEXT_LIMIT)}`;
+    }
+  }
+  return null;
+}
+
+function truncateFromHead(lines: string[], maxChars: number): string {
+  let total = 0;
+  let startLine = lines.length;
+
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const added = lines[i].length + (i < lines.length - 1 ? 1 : 0);
+    if (total + added > maxChars) {
+      break;
+    }
+    total += added;
+    startLine = i;
+  }
+
+  const kept = lines.slice(startLine);
+  if (startLine > 0) {
+    kept.unshift(`... (${startLine} earlier message${startLine === 1 ? '' : 's'} omitted)`);
+  }
+
+  return kept.join('\n');
+}
+
+function findLastIndex<T>(arr: T[], predicate: (item: T) => boolean): number {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (predicate(arr[i])) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 function buildCollaborationInstructions(options: PromptOptions, sourceLabel: string): string[] {

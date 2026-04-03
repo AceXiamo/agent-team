@@ -58,3 +58,12 @@ export function cloneMessage(message: Message): Message {
     content: message.content.map((item) => ({ ...item }))
   };
 }
+
+export function summarizeText(value: string, limit: number): string {
+  const singleLine = value.replace(/\s+/g, ' ').trim();
+  if (!singleLine) {
+    return '';
+  }
+
+  return singleLine.length > limit ? `${singleLine.slice(0, limit - 3)}...` : singleLine;
+}
