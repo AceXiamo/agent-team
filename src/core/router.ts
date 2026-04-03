@@ -90,6 +90,39 @@ export class MessageRouter {
     return this.snapshot();
   }
 
+  async interruptActiveWork(): Promise<boolean> {
+    const interruptedAgents: AgentName[] = [];
+    let clearedQueuedTasks = 0;
+
+    for (const agent of AGENTS) {
+      const state = this.state.agents[agent];
+      clearedQueuedTasks += this.queues[agent].length;
+      this.queues[agent] = [];
+
+      if (!state.activeRunId) {
+        this.syncAgentWorkState(agent);
+        continue;
+      }
+
+      interruptedAgents.push(agent);
+      this.cancelledRuns.add(state.activeRunId);
+      await this.registry.get(agent).abort(state.activeRunId);
+      this.syncAgentWorkState(agent);
+    }
+
+    if (interruptedAgents.length === 0) {
+      return false;
+    }
+
+    const agentLabel = interruptedAgents.map(capitalizeAgent).join(', ');
+    const queueLabel = clearedQueuedTasks > 0
+      ? ` Cleared ${clearedQueuedTasks} queued task${clearedQueuedTasks === 1 ? '' : 's'}.`
+      : '';
+
+    this.appendSystemMessage(`Interrupted active work for ${agentLabel}.${queueLabel}`.trim(), 'info');
+    return true;
+  }
+
   async handleInput(rawInput: string): Promise<void> {
     const parsed = parseUserInput(rawInput);
 

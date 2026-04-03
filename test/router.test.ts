@@ -170,6 +170,57 @@ describe('MessageRouter', () => {
     await router.dispose();
   });
 
+  it('interrupts active work and clears queued tasks without exiting the app', async () => {
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-team-router-'));
+    tempDirs.push(baseDir);
+
+    const registry = new DriverRegistry([
+      new MockDriver('claude'),
+      new BlockingDriver('codex'),
+      new MockDriver('kimi')
+    ]);
+
+    const router = await MessageRouter.create({
+      workdir: testWorkdir(),
+      registry,
+      sessionStore: new SessionStore(baseDir),
+      messageStore: new MessageLogStore(baseDir)
+    });
+
+    await router.handleInput('@Codex long running task');
+    await router.handleInput('@Codex queued follow-up');
+
+    for (let index = 0; index < 40; index += 1) {
+      const state = router.getState();
+      if (state.agents.codex.status === 'running' && state.agents.codex.queueLength === 1) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    expect(router.getState().agents.codex.status).toBe('running');
+    expect(router.getState().agents.codex.queueLength).toBe(1);
+
+    const interrupted = await router.interruptActiveWork();
+    expect(interrupted).toBe(true);
+
+    await waitForIdle(router);
+
+    const state = router.getState();
+    expect(state.agents.codex.status).toBe('idle');
+    expect(state.agents.codex.queueLength).toBe(0);
+    expect(state.messages.filter((message) => message.sender === 'codex')).toHaveLength(1);
+    expect(
+      state.messages.some((message) =>
+        message.content.some(
+          (content) => content.type === 'system' && content.text.includes('Interrupted active work for Codex. Cleared 1 queued task.')
+        )
+      )
+    ).toBe(true);
+
+    await router.dispose();
+  });
+
   it('restores message log on restart', async () => {
     const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-team-router-'));
     tempDirs.push(baseDir);
@@ -380,6 +431,41 @@ class MockDriver implements AgentDriver {
 
   async abort(runId: string): Promise<void> {
     this.aborted.add(runId);
+  }
+
+  async isAvailable(): Promise<boolean> {
+    return true;
+  }
+}
+
+class BlockingDriver implements AgentDriver {
+  readonly displayName: string;
+  private readonly aborted = new Set<string>();
+  private readonly pending = new Map<string, () => void>();
+
+  constructor(readonly name: AgentName) {
+    this.displayName = name;
+  }
+
+  async *send(opts: SendOptions): AsyncIterable<AgentEvent> {
+    yield { type: 'thinking', content: 'running' };
+
+    await new Promise<void>((resolve) => {
+      this.pending.set(opts.runId, resolve);
+    });
+
+    if (this.aborted.has(opts.runId)) {
+      yield { type: 'error', message: 'aborted' };
+      return;
+    }
+
+    yield { type: 'done', sessionId: `${this.name}-session` };
+  }
+
+  async abort(runId: string): Promise<void> {
+    this.aborted.add(runId);
+    this.pending.get(runId)?.();
+    this.pending.delete(runId);
   }
 
   async isAvailable(): Promise<boolean> {

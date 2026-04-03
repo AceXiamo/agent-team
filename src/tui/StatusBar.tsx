@@ -79,8 +79,9 @@ export function StatusBar({
         ↑↓ or Ctrl+P/Ctrl+N focus  Ctrl+L tail  Esc clear  ⏎ toggle/send  Tab @mention
       </Text>
       <Text dimColor>
-        /agent on|off  /new  /sessions  /switch id  /reset @Agent  ^C quit
+        /agent on|off  /new  /sessions  /switch id  /reset @Agent  ^C stop active / quit idle
       </Text>
+      <Text dimColor>Conversation + Context lane show delegation and review handoffs.</Text>
     </Box>
   );
 }

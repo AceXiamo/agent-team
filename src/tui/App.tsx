@@ -146,6 +146,11 @@ export function App({ router }: AppProps): React.JSX.Element {
     }
 
     if (key.ctrl && value === 'c') {
+      if (activeAgentCount > 0) {
+        void router.interruptActiveWork();
+        return;
+      }
+
       void router.dispose().finally(exit);
       return;
     }
