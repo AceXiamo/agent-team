@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Box, Text } from 'ink';
+import { ScrollView, type ScrollViewRef } from 'ink-scroll-view';
 
 import type { Message } from '../types.js';
 import { MessageBubble } from './MessageBubble.js';
-import { frame, pulse, useAnimationBeat } from './motion.js';
+import { pulse, useAnimationBeat } from './motion.js';
 
 interface MessageStreamProps {
   messages: Message[];
@@ -12,59 +13,77 @@ interface MessageStreamProps {
 }
 
 export function MessageStream({ messages, selectedMessageId, shouldAnimate }: MessageStreamProps): React.JSX.Element {
+  const scrollRef = useRef<ScrollViewRef>(null);
   const liveCount = messages.filter((message) => message.status === 'streaming').length;
   const uiBeat = useAnimationBeat(shouldAnimate && liveCount > 0);
-  const rows = process.stdout.rows ?? 24;
-  const visibleCount = Math.max(4, rows - 24);
-  const selectedIndex = selectedMessageId ? messages.findIndex((message) => message.id === selectedMessageId) : messages.length - 1;
+  const selectedIndex = selectedMessageId
+    ? messages.findIndex((message) => message.id === selectedMessageId)
+    : messages.length - 1;
 
-  let start = Math.max(0, messages.length - visibleCount);
-  if (selectedIndex !== -1) {
-    if (selectedIndex < start) {
-      start = selectedIndex;
-    } else if (selectedIndex >= start + visibleCount) {
-      start = selectedIndex - visibleCount + 1;
-    }
-  }
-
-  const visibleMessages = messages.slice(start, start + visibleCount);
-  const hiddenAbove = start;
-  const hiddenBelow = Math.max(0, messages.length - (start + visibleMessages.length));
   const focusLabel =
     selectedIndex === -1 || messages.length === 0 ? 'focus tail' : `focus ${selectedIndex + 1}/${messages.length}`;
-  const windowStart = visibleMessages.length === 0 ? 0 : start + 1;
-  const windowEnd = start + visibleMessages.length;
+
+  const autoScrollRef = useRef(true);
+
+  const handleScroll = useCallback((offset: number) => {
+    const sv = scrollRef.current;
+    if (!sv) return;
+    autoScrollRef.current = offset >= sv.getBottomOffset() - 1;
+  }, []);
+
+  useEffect(() => {
+    const sv = scrollRef.current;
+    if (!sv) return;
+    if (autoScrollRef.current) {
+      sv.scrollToBottom();
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    const sv = scrollRef.current;
+    if (!sv || selectedIndex < 0) return;
+    const pos = sv.getItemPosition(selectedIndex);
+    if (!pos) return;
+    const offset = sv.getScrollOffset();
+    const vpHeight = sv.getViewportHeight();
+    if (pos.top < offset) {
+      sv.scrollTo(pos.top);
+      autoScrollRef.current = false;
+    } else if (pos.top + pos.height > offset + vpHeight) {
+      sv.scrollTo(pos.top + pos.height - vpHeight);
+      autoScrollRef.current = pos.top + pos.height >= sv.getContentHeight();
+    }
+  }, [selectedIndex]);
+
+  useEffect(() => {
+    const onResize = () => scrollRef.current?.remeasure();
+    process.stdout.on('resize', onResize);
+    return () => { process.stdout.off('resize', onResize); };
+  }, []);
 
   return (
-    <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor="blue" paddingX={1}>
+    <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor="blue" paddingX={1} overflow="hidden">
       <Box justifyContent="space-between">
         <Text bold color="blue">
           {pulse(uiBeat)} Conversation
         </Text>
-        <Text dimColor>
-          {messages.length} messages • {focusLabel} • {liveCount > 0 ? `${liveCount} live` : 'idle'}
+        <Text dimColor wrap="truncate">
+          {messages.length} msgs • {focusLabel} • {liveCount > 0 ? `${liveCount} live` : 'idle'}
         </Text>
       </Box>
-      <Box justifyContent="space-between">
-        <Text dimColor>
-          {messages.length === 0 ? 'window empty' : `window ${windowStart}-${windowEnd}`} • {hiddenAbove > 0 ? `${hiddenAbove} above` : 'at top'} • {hiddenBelow > 0 ? `${hiddenBelow} below` : 'at tail'}
-        </Text>
-        <Text dimColor>{describeWindowState(hiddenAbove, hiddenBelow, liveCount, uiBeat)}</Text>
-      </Box>
-      <Box>
-        <Text color="gray">radar </Text>
-        {renderRadar(messages, start, visibleMessages.length, selectedMessageId, uiBeat)}
-      </Box>
-      {visibleMessages.length === 0 ? (
+      {messages.length === 0 ? (
         <EmptyState />
       ) : (
-        <Box flexDirection="column">
-          {hiddenAbove > 0 ? <Text dimColor>{`↑ ${hiddenAbove} earlier message${hiddenAbove === 1 ? '' : 's'}`}</Text> : null}
-          {visibleMessages.map((message) => (
-            <MessageBubble key={message.id} message={message} selected={message.id === selectedMessageId} shouldAnimate={shouldAnimate} />
+        <ScrollView ref={scrollRef} flexGrow={1} flexDirection="column" onScroll={handleScroll}>
+          {messages.map((message) => (
+            <MessageBubble
+              key={message.id}
+              message={message}
+              selected={message.id === selectedMessageId}
+              shouldAnimate={shouldAnimate}
+            />
           ))}
-          {hiddenBelow > 0 ? <Text dimColor>{`↓ ${hiddenBelow} newer message${hiddenBelow === 1 ? '' : 's'}`}</Text> : null}
-        </Box>
+        </ScrollView>
       )}
     </Box>
   );
@@ -78,70 +97,4 @@ function EmptyState(): React.JSX.Element {
       <Text dimColor>Delegations, tool activity, queueing, and agent replies will stream here.</Text>
     </Box>
   );
-}
-
-function renderRadar(
-  messages: Message[],
-  start: number,
-  visibleCount: number,
-  selectedMessageId: string | null,
-  uiBeat: number
-): React.JSX.Element {
-  if (messages.length === 0) {
-    return <Text dimColor>waiting for signal</Text>;
-  }
-
-  const width = Math.min(28, Math.max(10, messages.length));
-  const points = Array.from({ length: width }, (_, slot) => {
-    const index = Math.min(messages.length - 1, Math.floor((slot / width) * messages.length));
-    const message = messages[index]!;
-    const inWindow = index >= start && index < start + visibleCount;
-    const selected = message.id === selectedMessageId;
-    const color = message.status === 'error'
-      ? 'red'
-      : selected
-        ? 'white'
-        : inWindow
-          ? 'blue'
-          : 'gray';
-    const glyph = selected
-      ? '◆'
-      : message.status === 'streaming'
-        ? frame(uiBeat, ['•', '◦', '•', '●'])
-        : inWindow
-          ? '■'
-          : '·';
-
-    return { color, glyph, key: `${message.id}-${slot}` };
-  });
-
-  return (
-    <Text>
-      {points.map((point) => (
-        <Text key={point.key} color={point.color}>
-          {point.glyph}
-        </Text>
-      ))}
-    </Text>
-  );
-}
-
-function describeWindowState(hiddenAbove: number, hiddenBelow: number, liveCount: number, uiBeat: number): string {
-  if (liveCount > 0) {
-    return `${frame(uiBeat, ['syncing', 'syncing.', 'syncing..', 'syncing...'])}`;
-  }
-
-  if (hiddenAbove > 0 && hiddenBelow > 0) {
-    return 'inspecting history';
-  }
-
-  if (hiddenAbove > 0) {
-    return 'near the tail';
-  }
-
-  if (hiddenBelow > 0) {
-    return 'near the top';
-  }
-
-  return 'all in view';
 }

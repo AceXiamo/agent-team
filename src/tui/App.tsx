@@ -242,42 +242,50 @@ export function App({ router }: AppProps): React.JSX.Element {
     }
   });
 
+  const cols = process.stdout.columns ?? 80;
+  const rows = process.stdout.rows ?? 24;
+  const sidebarWidth = Math.max(30, Math.min(44, Math.floor(cols * 0.3)));
+
   return (
-    <Box flexDirection="column">
-      <Header
-        workdir={state.workdir}
-        agents={state.agents}
-        activeSessionId={state.activeSessionId}
-        activeSessionTitle={state.activeSessionTitle}
-        sessionCount={state.sessionCount}
-        messageCount={state.messages.length}
-        liveCount={liveCount}
-        shouldAnimate={shouldAnimate}
-      />
-      <ContextPanel messages={state.messages} selectedMessageId={selectedMessageId} shouldAnimate={shouldAnimate} />
-      <MessageStream messages={state.messages} selectedMessageId={selectedMessageId} shouldAnimate={shouldAnimate} />
-      <StatusBar
-        messageCount={state.messages.length}
-        selectedIndex={selectedIndex}
-        runningAgents={runningAgents}
-        queuedCount={queuedCount}
-        pendingReviewCount={pendingReviewCount}
-        disabledAgents={disabledAgents}
-        submitting={submitting}
-        liveCount={liveCount}
-        shouldAnimate={shouldAnimate}
-      />
-      <InputBox
-        input={input}
-        cursor={cursor}
-        suggestions={suggestions}
-        selectedSuggestion={selectedSuggestion}
-        activeSuggestion={activeSuggestion}
-        submitting={submitting}
-        targetAgent={targetAgent}
-        agentStates={state.agents}
-        shouldAnimate={shouldAnimate}
-      />
+    <Box flexDirection="row" width={cols} height={rows} overflow="hidden">
+      <Box flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden">
+        <MessageStream messages={state.messages} selectedMessageId={selectedMessageId} shouldAnimate={shouldAnimate} />
+        <StatusBar
+          messageCount={state.messages.length}
+          selectedIndex={selectedIndex}
+          runningAgents={runningAgents}
+          queuedCount={queuedCount}
+          pendingReviewCount={pendingReviewCount}
+          disabledAgents={disabledAgents}
+          submitting={submitting}
+          liveCount={liveCount}
+          shouldAnimate={shouldAnimate}
+        />
+        <InputBox
+          input={input}
+          cursor={cursor}
+          suggestions={suggestions}
+          selectedSuggestion={selectedSuggestion}
+          activeSuggestion={activeSuggestion}
+          submitting={submitting}
+          targetAgent={targetAgent}
+          agentStates={state.agents}
+          shouldAnimate={shouldAnimate}
+        />
+      </Box>
+      <Box flexDirection="column" width={sidebarWidth} flexShrink={0} overflow="hidden">
+        <Header
+          workdir={state.workdir}
+          agents={state.agents}
+          activeSessionId={state.activeSessionId}
+          activeSessionTitle={state.activeSessionTitle}
+          sessionCount={state.sessionCount}
+          messageCount={state.messages.length}
+          liveCount={liveCount}
+          shouldAnimate={shouldAnimate}
+        />
+        <ContextPanel messages={state.messages} selectedMessageId={selectedMessageId} shouldAnimate={shouldAnimate} />
+      </Box>
     </Box>
   );
 

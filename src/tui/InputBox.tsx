@@ -47,45 +47,23 @@ export const InputBox = React.memo(function InputBox({
   const routeLabel = targetInfo
     ? `route ${targetInfo.label} • ${targetInfo.statusText}`
     : 'route command center';
-  const helper = targetInfo
-    ? `${targetInfo.label} is ${targetInfo.statusText}. Enter follows the parsed route.`
-    : 'Use /agent @Claude off|on to control who can receive direct work and delegation.';
+
+  const hintText = suggestions.length > 0
+    ? suggestions.map((agent, index) =>
+        index === selectedSuggestion ? `[${shortLabel(agent)}]` : shortLabel(agent)
+      ).join(' ') + '  Tab to complete'
+    : draft.state === 'neutral' && !input
+      ? '↑↓ navigate  Tab @mention  /new /sessions /reset'
+      : routeLabel;
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={borderColor} paddingX={1}>
-      <Box justifyContent="space-between">
-        <Text color={titleColor} bold>
-          {prompt} {draft.title}
-        </Text>
-        <Text dimColor>{input.length > 0 ? `${cursor}/${input.length}` : ''}</Text>
-      </Box>
+    <Box flexDirection="column" borderStyle="round" borderColor={borderColor} paddingX={1} flexShrink={0} overflow="hidden">
       <Text>
-        <Text color={titleColor}>{`${prompt} `}</Text>
+        <Text color={titleColor} bold>{`${prompt} `}</Text>
         {input ? renderInputWithCursor(input, cursor, titleColor) : <Text dimColor>{placeholder}</Text>}
+        {input.length > 0 ? <Text dimColor>{` ${draft.title}`}</Text> : null}
       </Text>
-      <Text dimColor>{draft.detail}</Text>
-      <Text dimColor>{routeLabel}</Text>
-
-      {suggestions.length > 0 ? (
-        <Text dimColor>
-          {suggestions.map((agent, index) =>
-            index === selectedSuggestion
-              ? <Text key={agent} color="cyan" bold>{`[${shortLabel(agent)}]`}</Text>
-              : <Text key={agent}>{shortLabel(agent)}</Text>
-          ).reduce<React.ReactNode[]>((acc, node, i) => {
-            if (i > 0) acc.push(<Text key={`sp-${i}`}> </Text>);
-            acc.push(node);
-            return acc;
-          }, [])}
-        </Text>
-      ) : (
-        <Text dimColor>{helper}</Text>
-      )}
-      {suggestions.length > 0 ? (
-        <Text dimColor>{`Tab completes mention • current pick ${activeSuggestion ? shortLabel(activeSuggestion) : shortLabel(suggestions[0] ?? 'codex')}`}</Text>
-      ) : (
-        <Text dimColor>Quick routes: `/new`, `/sessions`, `/switch session-id`, `/reset @Agent`.</Text>
-      )}
+      <Text dimColor wrap="truncate">{hintText}</Text>
     </Box>
   );
 });

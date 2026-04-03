@@ -31,25 +31,25 @@ export const ContextPanel = React.memo(function ContextPanel({ messages, selecte
   }
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="magenta" paddingX={1}>
-      <Box justifyContent="space-between">
-        <Text bold color="magenta">
-          {pulse(uiBeat)} Context
-        </Text>
-        <Text dimColor>{stats.join(' • ')}</Text>
-      </Box>
+    <Box flexDirection="column" borderStyle="round" borderColor="magenta" paddingX={1} flexGrow={1} overflow="hidden">
+      <Text bold color="magenta">
+        {pulse(uiBeat)} Context
+      </Text>
+      <Text dimColor wrap="truncate">{stats.slice(0, 3).join(' • ')}</Text>
+      {(overview.totalCostUsd > 0 || overview.toolEvents > 0) ? (
+        <Text dimColor wrap="truncate">{stats.slice(3).join(' • ')}</Text>
+      ) : null}
       <Box>
         <Text color="gray">lane </Text>
         {renderLane(messages, selectedMessageId, uiBeat)}
-        <Text dimColor>{`  last ${Math.min(messages.length, 24)}`}</Text>
       </Box>
-      <Text>
+      <Text wrap="truncate">
         <Text color="gray">focus </Text>
         <Text bold>{focused.title}</Text>
-        <Text dimColor>{`  ${focused.detail}`}</Text>
       </Text>
-      <Text dimColor>{focused.preview}</Text>
-      <Text dimColor>{describeNextMove(messages, overview.liveMessages)}</Text>
+      <Text dimColor wrap="truncate">{focused.detail}</Text>
+      <Text dimColor wrap="truncate">{focused.preview}</Text>
+      <Text dimColor wrap="truncate">{describeNextMove(messages, overview.liveMessages)}</Text>
     </Box>
   );
 });

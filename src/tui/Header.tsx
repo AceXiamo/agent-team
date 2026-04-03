@@ -44,39 +44,26 @@ export const Header = React.memo(function Header({
       : 'standby';
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
-      <Box justifyContent="space-between">
-        <Text bold color="cyan">
-          {signal} agent-team
-        </Text>
-        <Text dimColor>
-          {activityLabel} • {usableCount}/{entries.length} online • {messageCount} msgs
-        </Text>
-      </Box>
-
-      <Box justifyContent="space-between">
-        <Text>
-          <Text color="gray">ws </Text>
-          <Text bold>{formatWorkdir(workdir)}</Text>
-        </Text>
-        <Text>
-          <Text color="gray">ses </Text>
-          <Text bold>{activeSessionTitle ?? '—'}</Text>
-          {activeSessionId ? <Text dimColor>{` (${shortId(activeSessionId)})`}</Text> : null}
-          <Text dimColor>{` • ${sessionCount}`}</Text>
-        </Text>
-      </Box>
-
-      <Box justifyContent="space-between">
-        <Text dimColor>
-          ops {meter(runningCount + liveCount, entries.length + 2, uiBeat) || 'clear'}
-        </Text>
-        <Text dimColor>
-          {queuedCount > 0 ? `${queuedCount} queued` : 'queue clear'} • {reviewCount > 0 ? `${reviewCount} review` : 'review clear'}
-        </Text>
-      </Box>
-
-      <Box gap={1} flexWrap="wrap">
+    <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1} flexShrink={0} overflow="hidden">
+      <Text bold color="cyan">
+        {signal} agent-team
+      </Text>
+      <Text dimColor>
+        {activityLabel} • {usableCount}/{entries.length} online
+      </Text>
+      <Text wrap="truncate">
+        <Text color="gray">ws </Text>
+        <Text bold>{formatWorkdir(workdir)}</Text>
+      </Text>
+      <Text wrap="truncate">
+        <Text color="gray">ses </Text>
+        <Text bold>{activeSessionTitle ?? '—'}</Text>
+        <Text dimColor>{` • ${sessionCount}`}</Text>
+      </Text>
+      <Text dimColor wrap="truncate">
+        {meter(runningCount + liveCount, entries.length + 2, uiBeat) || 'clear'} {queuedCount > 0 ? `q${queuedCount}` : ''} {reviewCount > 0 ? `r${reviewCount}` : ''}
+      </Text>
+      <Box flexDirection="column">
         {AGENT_ORDER.map((name) => (
           <AgentPill key={name} agent={agents[name]} uiBeat={uiBeat} />
         ))}
