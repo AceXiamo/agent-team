@@ -3,6 +3,8 @@ import { Box, Text } from 'ink';
 
 import type { AgentName, AgentState } from '../types.js';
 import { AGENT_LABELS } from '../core/utils.js';
+import { describeDraft } from './insights.js';
+import { frame, sweep } from './motion.js';
 
 interface InputBoxProps {
   input: string;
@@ -12,6 +14,7 @@ interface InputBoxProps {
   submitting: boolean;
   targetAgent: AgentName | null;
   agentStates: Record<AgentName, AgentState>;
+  uiBeat: number;
 }
 
 export function InputBox({
@@ -21,28 +24,46 @@ export function InputBox({
   activeSuggestion,
   submitting,
   targetAgent,
-  agentStates
+  agentStates,
+  uiBeat
 }: InputBoxProps): React.JSX.Element {
   const targetInfo = targetAgent ? getTargetInfo(targetAgent, agentStates) : null;
-  const hint = targetInfo
-    ? `${targetInfo.label} is ${targetInfo.statusText}. Enter sends there.`
-    : 'Use /agent @Claude off|on to control which agents can receive new work.';
+  const draft = describeDraft(input, agentStates);
+  const borderColor = draft.state === 'error'
+    ? 'red'
+    : draft.state === 'ready'
+      ? 'green'
+      : targetInfo?.color ?? 'yellow';
+  const titleColor = draft.state === 'error'
+    ? 'red'
+    : draft.state === 'ready'
+      ? 'green'
+      : targetInfo?.color ?? 'yellow';
+  const prompt = submitting
+    ? sweep(uiBeat)
+    : frame(uiBeat, input ? ['▏', '▎', '▍', '▋'] : ['>', '>', '>', '•']);
+  const inputLine = input || frame(uiBeat, ['type a request for one agent', 'type a request for one agent.', 'type a request for one agent..']);
+  const routeLabel = targetInfo
+    ? `route ${targetInfo.label} • ${targetInfo.statusText}`
+    : 'route command center';
+  const helper = targetInfo
+    ? `${targetInfo.label} is ${targetInfo.statusText}. Enter follows the parsed route.`
+    : 'Use /agent @Claude off|on to control who can receive direct work and delegation.';
 
   return (
-    <Box flexDirection="column" borderStyle="single" borderColor="yellow" paddingX={1}>
+    <Box flexDirection="column" borderStyle="round" borderColor={borderColor} paddingX={1}>
       <Box justifyContent="space-between">
-        <Box gap={1}>
-          {targetInfo ? (
-            <>
-              <Text color={targetInfo.color}>@{targetInfo.label}</Text>
-              <Text dimColor>{targetInfo.statusText}</Text>
-              <Text dimColor>│</Text>
-            </>
-          ) : null}
-          <Text>{`> ${input || '_'}`}</Text>
-        </Box>
-        <Text dimColor>{submitting ? '…' : `${input.length}`}</Text>
+        <Text color={titleColor} bold>
+          {submitting ? sweep(uiBeat) : prompt} {draft.title}
+        </Text>
+        <Text dimColor>{`${input.length} chars`}</Text>
       </Box>
+      <Text>
+        <Text color={titleColor}>{`${prompt} `}</Text>
+        {input ? <Text>{inputLine}</Text> : <Text dimColor>{inputLine}</Text>}
+      </Text>
+      <Text dimColor>{draft.detail}</Text>
+      <Text dimColor>{routeLabel}</Text>
 
       {suggestions.length > 0 ? (
         <Text dimColor>
@@ -56,8 +77,14 @@ export function InputBox({
             return acc;
           }, [])}
         </Text>
-      ) : null}
-      <Text dimColor>{hint}</Text>
+      ) : (
+        <Text dimColor>{helper}</Text>
+      )}
+      {suggestions.length > 0 ? (
+        <Text dimColor>{`Tab completes mention • current pick ${activeSuggestion ? shortLabel(activeSuggestion) : shortLabel(suggestions[0] ?? 'codex')}`}</Text>
+      ) : (
+        <Text dimColor>Quick routes: `/new`, `/sessions`, `/switch session-id`, `/reset @Agent`.</Text>
+      )}
     </Box>
   );
 }

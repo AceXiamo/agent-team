@@ -50,7 +50,7 @@ export class MessageRouter {
 
   private emitTimer: ReturnType<typeof setTimeout> | null = null;
   private emitQueued = false;
-  private static readonly EMIT_DELAY_MS = 50;
+  private static readonly EMIT_DELAY_MS = 80;
 
   private constructor(options: RouterOptions) {
     this.workdir = options.workdir;

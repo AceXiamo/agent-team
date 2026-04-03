@@ -4,6 +4,7 @@ import { Box, Text } from 'ink';
 import type { Message, MessageContent, TokenUsage } from '../types.js';
 import { formatTimestamp, senderLabel } from '../core/utils.js';
 import { MarkdownText } from './MarkdownText.js';
+import { frame, orbit } from './motion.js';
 
 function formatUsage(usage: TokenUsage): string {
   const parts: string[] = [];
@@ -17,12 +18,15 @@ function formatUsage(usage: TokenUsage): string {
 interface MessageBubbleProps {
   message: Message;
   selected: boolean;
+  uiBeat: number;
 }
 
-export function MessageBubble({ message, selected }: MessageBubbleProps): React.JSX.Element {
+export function MessageBubble({ message, selected, uiBeat }: MessageBubbleProps): React.JSX.Element {
   const accent = getAccentColor(message);
   const isStreaming = message.status === 'streaming';
   const usageText = !isStreaming && message.usage ? formatUsage(message.usage) : '';
+  const marker = selected ? frame(uiBeat, ['▶', '▸', '▶', '▹']) : '•';
+  const contentSummary = summarizeKinds(message.content);
 
   return (
     <Box
@@ -34,10 +38,12 @@ export function MessageBubble({ message, selected }: MessageBubbleProps): React.
     >
       <Box justifyContent="space-between">
         <Text color={accent} bold>
-          {selected ? '▶' : '•'} {senderLabel(message.sender)}
+          {marker} {senderLabel(message.sender)}
+          {contentSummary ? <Text dimColor>{` • ${contentSummary}`}</Text> : null}
         </Text>
-        <Text dimColor>
-          {formatTimestamp(message.timestamp)} {renderStatusLabel(message)}
+        <Text>
+          <Text dimColor>{`${formatTimestamp(message.timestamp)} `}</Text>
+          <Text color={accent}>{renderStatusLabel(message, uiBeat)}</Text>
         </Text>
       </Box>
       <Box flexDirection="column" marginLeft={2}>
@@ -130,13 +136,13 @@ function ToolBlock({
   );
 }
 
-function renderStatusLabel(message: Message): string {
+function renderStatusLabel(message: Message, uiBeat: number): string {
   if (message.status === 'streaming') {
-    return 'live';
+    return `${orbit(uiBeat)} ${frame(uiBeat, ['live', 'live.', 'live..', 'live...'])}`;
   }
 
   if (message.status === 'error') {
-    return 'error';
+    return '▲ error';
   }
 
   return 'done';
@@ -193,4 +199,31 @@ function summarizeText(value: string): string {
   }
 
   return singleLine.length > 72 ? `${singleLine.slice(0, 69)}...` : singleLine;
+}
+
+function summarizeKinds(content: MessageContent[]): string {
+  const kinds = new Set<string>();
+
+  for (const block of content) {
+    switch (block.type) {
+      case 'text':
+        kinds.add('reply');
+        break;
+      case 'thinking':
+        kinds.add('thinking');
+        break;
+      case 'tool_use':
+      case 'tool_result':
+        kinds.add('tools');
+        break;
+      case 'delegate':
+        kinds.add('delegate');
+        break;
+      case 'system':
+        kinds.add('system');
+        break;
+    }
+  }
+
+  return [...kinds].join(' + ');
 }

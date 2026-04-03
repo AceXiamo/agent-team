@@ -1,6 +1,8 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 
+import { meter, pulse, sweep } from './motion.js';
+
 interface StatusBarProps {
   messageCount: number;
   selectedIndex: number; // -1 means tail
@@ -9,6 +11,8 @@ interface StatusBarProps {
   pendingReviewCount: number;
   disabledAgents: string[];
   submitting: boolean;
+  liveCount: number;
+  uiBeat: number;
 }
 
 export function StatusBar({
@@ -18,7 +22,9 @@ export function StatusBar({
   queuedCount,
   pendingReviewCount,
   disabledAgents,
-  submitting
+  submitting,
+  liveCount,
+  uiBeat
 }: StatusBarProps): React.JSX.Element {
   const isTail = selectedIndex === -1 || selectedIndex === messageCount - 1;
   const focusLabel = messageCount === 0
@@ -34,12 +40,13 @@ export function StatusBar({
   const queueLabel = queuedCount > 0 ? `${queuedCount} queued` : 'queue clear';
   const reviewLabel = pendingReviewCount > 0 ? `${pendingReviewCount} review pending` : 'review clear';
   const disabledLabel = disabledAgents.length > 0 ? `${disabledAgents.join(', ')} off` : 'all agents on';
+  const signal = submitting || runningAgents.length > 0 || liveCount > 0 ? sweep(uiBeat) : pulse(uiBeat);
 
   return (
-    <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1}>
+    <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
       <Box gap={2}>
         <Text dimColor>
-          <Text bold color="white">▶</Text>
+          <Text bold color="white">{signal}</Text>
           {` ${focusLabel}`}
         </Text>
         <Text dimColor>│</Text>
@@ -50,6 +57,12 @@ export function StatusBar({
         <Text dimColor>{queueLabel}</Text>
         <Text dimColor>│</Text>
         <Text dimColor>{reviewLabel}</Text>
+        {liveCount > 0 ? (
+          <>
+            <Text dimColor>│</Text>
+            <Text color="cyan">{`${liveCount} live`}</Text>
+          </>
+        ) : null}
         {submitting ? (
           <>
             <Text dimColor>│</Text>
@@ -58,9 +71,15 @@ export function StatusBar({
         ) : null}
       </Box>
 
-      <Text dimColor>{disabledLabel}</Text>
+      <Box justifyContent="space-between">
+        <Text dimColor>{disabledLabel}</Text>
+        <Text dimColor>{`ops ${meter(runningAgents.length + liveCount, 8, uiBeat) || 'clear'}`}</Text>
+      </Box>
       <Text dimColor>
-        ↑↓ focus  Esc clear draft  ⏎ toggle/send  Tab @mention  /agent @Claude off|on  /new  /sessions  /switch  ^C quit
+        ↑↓ or Ctrl+P/Ctrl+N focus  Ctrl+L tail  Esc clear  ⏎ toggle/send  Tab @mention
+      </Text>
+      <Text dimColor>
+        /agent on|off  /new  /sessions  /switch id  /reset @Agent  ^C quit
       </Text>
     </Box>
   );

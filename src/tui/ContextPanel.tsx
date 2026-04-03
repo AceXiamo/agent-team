@@ -3,13 +3,15 @@ import { Box, Text } from 'ink';
 
 import type { Message } from '../types.js';
 import { collectConversationOverview, describeFocusedMessage } from './insights.js';
+import { pulse } from './motion.js';
 
 interface ContextPanelProps {
   messages: Message[];
   selectedMessageId: string | null;
+  uiBeat: number;
 }
 
-export function ContextPanel({ messages, selectedMessageId }: ContextPanelProps): React.JSX.Element {
+export function ContextPanel({ messages, selectedMessageId, uiBeat }: ContextPanelProps): React.JSX.Element {
   const overview = collectConversationOverview(messages);
   const focused = describeFocusedMessage(messages, selectedMessageId);
   const stats = [
@@ -31,9 +33,14 @@ export function ContextPanel({ messages, selectedMessageId }: ContextPanelProps)
     <Box flexDirection="column" borderStyle="round" borderColor="magenta" paddingX={1}>
       <Box justifyContent="space-between">
         <Text bold color="magenta">
-          Context
+          {pulse(uiBeat)} Context
         </Text>
         <Text dimColor>{stats.join(' • ')}</Text>
+      </Box>
+      <Box>
+        <Text color="gray">lane </Text>
+        {renderLane(messages, selectedMessageId, uiBeat)}
+        <Text dimColor>{`  last ${Math.min(messages.length, 24)}`}</Text>
       </Box>
       <Text>
         <Text color="gray">focus </Text>
@@ -41,6 +48,66 @@ export function ContextPanel({ messages, selectedMessageId }: ContextPanelProps)
         <Text dimColor>{`  ${focused.detail}`}</Text>
       </Text>
       <Text dimColor>{focused.preview}</Text>
+      <Text dimColor>{describeNextMove(messages, overview.liveMessages)}</Text>
     </Box>
   );
+}
+
+function renderLane(messages: Message[], selectedMessageId: string | null, uiBeat: number): React.JSX.Element {
+  const recent = messages.slice(-24);
+
+  if (recent.length === 0) {
+    return <Text dimColor>waiting for the first turn</Text>;
+  }
+
+  return (
+    <Text>
+      {recent.map((message, index) => {
+        const selected = message.id === selectedMessageId;
+        const color = message.status === 'error'
+          ? 'red'
+          : message.sender === 'human'
+            ? 'yellow'
+            : message.sender === 'system'
+              ? 'blue'
+              : message.sender === 'claude'
+                ? 'magenta'
+                : message.sender === 'codex'
+                  ? 'cyan'
+                  : 'green';
+        const glyph = selected
+          ? '▣'
+          : message.status === 'streaming'
+            ? uiBeat % 2 === 0
+              ? '◉'
+              : '◎'
+            : message.status === 'error'
+              ? '▲'
+              : '■';
+
+        return (
+          <Text key={message.id ?? index} color={color}>
+            {glyph}
+          </Text>
+        );
+      })}
+    </Text>
+  );
+}
+
+function describeNextMove(messages: Message[], liveMessages: number): string {
+  if (messages.length === 0) {
+    return 'Tip: start with one target like @Codex inspect src/ and let the lane fill with live activity.';
+  }
+
+  if (liveMessages > 0) {
+    return 'Live output is active. Use Ctrl+L to snap back to tail if you have scrolled into history.';
+  }
+
+  const latest = messages[messages.length - 1];
+  if (latest?.status === 'error') {
+    return 'Latest turn ended in error. Move focus there and inspect tool/result blocks before sending follow-up work.';
+  }
+
+  return 'Navigation stays local to the selected message. Enter toggles expanded blocks when the draft is empty.';
 }

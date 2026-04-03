@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, useApp, useInput } from 'ink';
+import { Box, useApp, useInput, useStdin } from 'ink';
 
 import { extractMentionCandidates } from '../core/commandParser.js';
 import { senderLabel } from '../core/utils.js';
@@ -17,14 +17,46 @@ interface AppProps {
 
 export function App({ router }: AppProps): React.JSX.Element {
   const { exit } = useApp();
+  const { stdin } = useStdin();
   const [state, setState] = useState<AppState>(router.getState());
   const [input, setInput] = useState('');
+  const [uiBeat, setUiBeat] = useState(0);
+  const [terminalFocused, setTerminalFocused] = useState(true);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(state.messages.at(-1)?.id ?? null);
   const [selectedSuggestion, setSelectedSuggestion] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const previousLastMessageId = useRef<string | null>(state.messages.at(-1)?.id ?? null);
 
   useEffect(() => router.subscribe(setState), [router]);
+
+  const activeAgentCount = useMemo(() =>
+    Object.values(state.agents).filter((agent) => agent.status === 'running' || agent.activeMode === 'review_handoff').length,
+    [state.agents]
+  );
+
+  useEffect(() => {
+    if (!process.stdout.isTTY || !stdin) {
+      return;
+    }
+
+    const handleFocusChange = (chunk: string | Buffer): void => {
+      const input = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk;
+      if (input.includes('\u001b[I')) {
+        setTerminalFocused(true);
+      }
+      if (input.includes('\u001b[O')) {
+        setTerminalFocused(false);
+      }
+    };
+
+    process.stdout.write('\u001b[?1004h');
+    stdin.on('data', handleFocusChange);
+
+    return () => {
+      stdin.off('data', handleFocusChange);
+      process.stdout.write('\u001b[?1004l');
+    };
+  }, [stdin]);
 
   useEffect(() => {
     const currentLastId = state.messages.at(-1)?.id ?? null;
@@ -73,6 +105,25 @@ export function App({ router }: AppProps): React.JSX.Element {
     [state.agents]
   );
 
+  const liveCount = useMemo(() =>
+    state.messages.filter((message) => message.status === 'streaming').length,
+    [state.messages]
+  );
+
+  const shouldAnimate = terminalFocused && (submitting || liveCount > 0 || activeAgentCount > 0);
+
+  useEffect(() => {
+    if (!shouldAnimate) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setUiBeat((current) => (current + 1) % 240);
+    }, 700);
+
+    return () => clearInterval(timer);
+  }, [shouldAnimate]);
+
   const pendingReviewCount = useMemo(() =>
     Object.values(state.agents).reduce((sum, agent) => sum + agent.pendingReviewCount, 0),
     [state.agents]
@@ -90,8 +141,27 @@ export function App({ router }: AppProps): React.JSX.Element {
     : -1;
 
   useInput((value, key) => {
+    if (value === '[I' || value === '[O') {
+      return;
+    }
+
     if (key.ctrl && value === 'c') {
       void router.dispose().finally(exit);
+      return;
+    }
+
+    if (key.ctrl && value === 'p') {
+      navigateSelection(-1);
+      return;
+    }
+
+    if (key.ctrl && value === 'n') {
+      navigateSelection(1);
+      return;
+    }
+
+    if (key.ctrl && value === 'l') {
+      setSelectedMessageId(state.messages.at(-1)?.id ?? null);
       return;
     }
 
@@ -144,9 +214,12 @@ export function App({ router }: AppProps): React.JSX.Element {
         activeSessionId={state.activeSessionId}
         activeSessionTitle={state.activeSessionTitle}
         sessionCount={state.sessionCount}
+        messageCount={state.messages.length}
+        liveCount={liveCount}
+        uiBeat={uiBeat}
       />
-      <ContextPanel messages={state.messages} selectedMessageId={selectedMessageId} />
-      <MessageStream messages={state.messages} selectedMessageId={selectedMessageId} />
+      <ContextPanel messages={state.messages} selectedMessageId={selectedMessageId} uiBeat={uiBeat} />
+      <MessageStream messages={state.messages} selectedMessageId={selectedMessageId} uiBeat={uiBeat} />
       <StatusBar
         messageCount={state.messages.length}
         selectedIndex={selectedIndex}
@@ -155,6 +228,8 @@ export function App({ router }: AppProps): React.JSX.Element {
         pendingReviewCount={pendingReviewCount}
         disabledAgents={disabledAgents}
         submitting={submitting}
+        liveCount={liveCount}
+        uiBeat={uiBeat}
       />
       <InputBox
         input={input}
@@ -164,6 +239,7 @@ export function App({ router }: AppProps): React.JSX.Element {
         submitting={submitting}
         targetAgent={targetAgent}
         agentStates={state.agents}
+        uiBeat={uiBeat}
       />
     </Box>
   );
