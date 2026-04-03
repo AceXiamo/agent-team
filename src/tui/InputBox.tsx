@@ -52,9 +52,7 @@ export const InputBox = React.memo(function InputBox({
     ? suggestions.map((agent, index) =>
         index === selectedSuggestion ? `[${shortLabel(agent)}]` : shortLabel(agent)
       ).join(' ') + '  Tab to complete'
-    : draft.state === 'neutral' && !input
-      ? '↑↓ navigate  Tab @mention  /new /sessions /reset'
-      : routeLabel;
+    : routeLabel;
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={borderColor} paddingX={1} flexShrink={0} overflow="hidden">

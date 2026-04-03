@@ -11,6 +11,8 @@ import { MessageStream, type MessageStreamHandle } from './MessageStream.js';
 import { StatusBar } from './StatusBar.js';
 import { MessageRouter } from '../core/router.js';
 
+const SCROLL_LINES = 3;
+
 interface AppProps {
   router: MessageRouter;
 }
@@ -40,26 +42,22 @@ export function App({ router }: AppProps): React.JSX.Element {
       return;
     }
 
-    const handleStdinData = (chunk: string | Buffer): void => {
+    const handleFocusChange = (chunk: string | Buffer): void => {
       const raw = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk;
-
       if (raw.includes('\u001b[I')) {
         setTerminalFocused(true);
       }
       if (raw.includes('\u001b[O')) {
         setTerminalFocused(false);
       }
-
-      parseMouseWheel(raw, (delta) => messageStreamRef.current?.scrollBy(delta));
     };
 
-    // Enable focus reporting + SGR mouse tracking (wheel only needs button events)
-    process.stdout.write('\u001b[?1004h\u001b[?1000h\u001b[?1006h');
-    stdin.on('data', handleStdinData);
+    process.stdout.write('\u001b[?1004h');
+    stdin.on('data', handleFocusChange);
 
     return () => {
-      stdin.off('data', handleStdinData);
-      process.stdout.write('\u001b[?1006l\u001b[?1000l\u001b[?1004l');
+      stdin.off('data', handleFocusChange);
+      process.stdout.write('\u001b[?1004l');
     };
   }, [stdin]);
 
@@ -138,11 +136,6 @@ export function App({ router }: AppProps): React.JSX.Element {
       return;
     }
 
-    // SGR mouse sequences leak partial chars into useInput — discard them
-    if (/^\[<\d/.test(value) || /^\d+;\d+[Mm]/.test(value)) {
-      return;
-    }
-
     if (key.ctrl && value === 'c') {
       if (activeAgentCount > 0) {
         void router.interruptActiveWork();
@@ -176,7 +169,7 @@ export function App({ router }: AppProps): React.JSX.Element {
     }
 
     if (key.upArrow || key.downArrow) {
-      navigateSelection(key.upArrow ? -1 : 1);
+      messageStreamRef.current?.scrollBy(key.upArrow ? -SCROLL_LINES : SCROLL_LINES);
       return;
     }
 
@@ -338,26 +331,4 @@ function applyMentionCompletion(input: string, agent: AgentName): string {
   }
 
   return `${input.slice(0, index)}${mention} `;
-}
-
-/**
- * Parse SGR-encoded mouse wheel events from raw stdin data and invoke
- * the scroll callback with line-level deltas.
- * SGR format: \x1b[<button;col;rowM (press) or m (release).
- * Wheel up = button 64, wheel down = button 65.
- */
-const SGR_MOUSE_RE = /\x1b\[<(\d+);\d+;\d+[Mm]/g;
-const WHEEL_SCROLL_LINES = 3;
-
-function parseMouseWheel(raw: string, scroll: (delta: number) => void): void {
-  let match: RegExpExecArray | null;
-  while ((match = SGR_MOUSE_RE.exec(raw)) !== null) {
-    const button = Number(match[1]);
-    if (button === 64) {
-      scroll(-WHEEL_SCROLL_LINES);
-    } else if (button === 65) {
-      scroll(WHEEL_SCROLL_LINES);
-    }
-  }
-  SGR_MOUSE_RE.lastIndex = 0;
 }

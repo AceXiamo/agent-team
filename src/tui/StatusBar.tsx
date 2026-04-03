@@ -5,7 +5,7 @@ import { pulse, sweep, useAnimationBeat } from './motion.js';
 
 interface StatusBarProps {
   messageCount: number;
-  selectedIndex: number; // -1 means tail
+  selectedIndex: number;
   runningAgents: string[];
   queuedCount: number;
   pendingReviewCount: number;
@@ -38,12 +38,12 @@ export const StatusBar = React.memo(function StatusBar({
     ? `${runningAgents.join(', ')} running`
     : 'idle';
 
-  const queueLabel = queuedCount > 0 ? `${queuedCount} queued` : 'queue clear';
-  const reviewLabel = pendingReviewCount > 0 ? `${pendingReviewCount} review pending` : 'review clear';
-  const disabledLabel = disabledAgents.length > 0 ? `${disabledAgents.join(', ')} off` : 'all agents on';
+  const queueLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
+  const reviewLabel = pendingReviewCount > 0 ? `${pendingReviewCount} review` : null;
+  const disabledLabel = disabledAgents.length > 0 ? `${disabledAgents.join(', ')} off` : null;
   const signal = submitting || runningAgents.length > 0 || liveCount > 0 ? sweep(uiBeat) : pulse(uiBeat);
 
-  const segments = [
+  const statusSegments = [
     focusLabel,
     runningLabel,
     queueLabel,
@@ -54,11 +54,38 @@ export const StatusBar = React.memo(function StatusBar({
   ].filter(Boolean).join('  ');
 
   return (
-    <Box borderStyle="round" borderColor="gray" paddingX={1} flexShrink={0} overflow="hidden">
-      <Text wrap="truncate">
+    <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} flexShrink={0} overflow="hidden">
+      <Box>
         <Text bold color="white">{signal}</Text>
-        <Text dimColor>{`  ${segments}`}</Text>
-      </Text>
+        <Text dimColor>{`  ${statusSegments}`}</Text>
+      </Box>
+      <KeyHints />
     </Box>
   );
 });
+
+function KeyHints(): React.JSX.Element {
+  return (
+    <Box flexWrap="wrap" gap={1}>
+      <KeyBadge k="↑↓" desc="scroll" color="cyan" />
+      <KeyBadge k="^P/N" desc="prev/next msg" color="cyan" />
+      <KeyBadge k="^L" desc="jump to latest" color="cyan" />
+      <KeyBadge k="Enter" desc="send / expand" color="green" />
+      <KeyBadge k="Tab" desc="@mention" color="yellow" />
+      <KeyBadge k="Esc" desc="clear" color="gray" />
+      <KeyBadge k="^C" desc="stop / quit" color="red" />
+      <KeyBadge k="/new" desc="session" color="magenta" />
+      <KeyBadge k="/sessions" desc="list" color="magenta" />
+      <KeyBadge k="/reset" desc="agent" color="magenta" />
+    </Box>
+  );
+}
+
+function KeyBadge({ k, desc, color }: { k: string; desc: string; color: string }): React.JSX.Element {
+  return (
+    <Text>
+      <Text bold color={color}>{k}</Text>
+      <Text dimColor>{` ${desc}`}</Text>
+    </Text>
+  );
+}
