@@ -2,6 +2,7 @@
   "name": "agent-team",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "bin": {
     "agent-team": "dist/src/index.js"
