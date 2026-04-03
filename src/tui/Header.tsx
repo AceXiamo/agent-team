@@ -5,7 +5,7 @@ import { Box, Text } from 'ink';
 
 import type { AgentState } from '../types.js';
 import { AGENT_LABELS } from '../core/utils.js';
-import { meter, orbit, pulse, sweep } from './motion.js';
+import { meter, orbit, pulse, sweep, useAnimationBeat } from './motion.js';
 
 interface HeaderProps {
   workdir: string;
@@ -15,12 +15,12 @@ interface HeaderProps {
   sessionCount: number;
   messageCount: number;
   liveCount: number;
-  uiBeat: number;
+  shouldAnimate: boolean;
 }
 
 const AGENT_ORDER: Array<'claude' | 'codex' | 'kimi'> = ['claude', 'codex', 'kimi'];
 
-export function Header({
+export const Header = React.memo(function Header({
   workdir,
   agents,
   activeSessionId,
@@ -28,13 +28,14 @@ export function Header({
   sessionCount,
   messageCount,
   liveCount,
-  uiBeat
+  shouldAnimate
 }: HeaderProps): React.JSX.Element {
   const entries = Object.values(agents);
   const usableCount = entries.filter((agent) => agent.available && agent.enabled).length;
   const runningCount = entries.filter((agent) => agent.status === 'running').length;
   const queuedCount = entries.reduce((sum, agent) => sum + agent.queueLength, 0);
   const reviewCount = entries.reduce((sum, agent) => sum + agent.pendingReviewCount, 0);
+  const uiBeat = useAnimationBeat(shouldAnimate);
   const signal = runningCount > 0 || liveCount > 0 ? sweep(uiBeat) : pulse(uiBeat);
   const activityLabel = runningCount > 0
     ? `${runningCount} hot`
@@ -82,7 +83,7 @@ export function Header({
       </Box>
     </Box>
   );
-}
+});
 
 function AgentPill({ agent, uiBeat }: { agent: AgentState; uiBeat: number }): React.JSX.Element {
   const color = getAgentColor(agent);

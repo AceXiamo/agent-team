@@ -1,3 +1,46 @@
+import { useEffect, useState } from 'react';
+
+let globalBeat = 0;
+let globalTimer: ReturnType<typeof setInterval> | null = null;
+const beatSubscribers = new Set<() => void>();
+
+function subscribeBeat(callback: () => void): () => void {
+  beatSubscribers.add(callback);
+  if (!globalTimer) {
+    globalTimer = setInterval(() => {
+      globalBeat = (globalBeat + 1) % 240;
+      for (const sub of beatSubscribers) {
+        sub();
+      }
+    }, 700);
+  }
+  return () => {
+    beatSubscribers.delete(callback);
+    if (beatSubscribers.size === 0 && globalTimer) {
+      clearInterval(globalTimer);
+      globalTimer = null;
+      globalBeat = 0;
+    }
+  };
+}
+
+export function useAnimationBeat(active: boolean): number {
+  const [beat, setBeat] = useState(0);
+
+  useEffect(() => {
+    if (!active) {
+      setBeat(0);
+      return;
+    }
+    setBeat(globalBeat);
+    return subscribeBeat(() => {
+      setBeat(globalBeat);
+    });
+  }, [active]);
+
+  return beat;
+}
+
 export function frame(beat: number, frames: readonly string[]): string {
   if (frames.length === 0) {
     return '';

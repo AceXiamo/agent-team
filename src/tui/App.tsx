@@ -20,7 +20,7 @@ export function App({ router }: AppProps): React.JSX.Element {
   const { stdin } = useStdin();
   const [state, setState] = useState<AppState>(router.getState());
   const [input, setInput] = useState('');
-  const [uiBeat, setUiBeat] = useState(0);
+  const [cursor, setCursor] = useState(0);
   const [terminalFocused, setTerminalFocused] = useState(true);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(state.messages.at(-1)?.id ?? null);
   const [selectedSuggestion, setSelectedSuggestion] = useState(0);
@@ -112,18 +112,6 @@ export function App({ router }: AppProps): React.JSX.Element {
 
   const shouldAnimate = terminalFocused && (submitting || liveCount > 0 || activeAgentCount > 0);
 
-  useEffect(() => {
-    if (!shouldAnimate) {
-      return;
-    }
-
-    const timer = setInterval(() => {
-      setUiBeat((current) => (current + 1) % 240);
-    }, 700);
-
-    return () => clearInterval(timer);
-  }, [shouldAnimate]);
-
   const pendingReviewCount = useMemo(() =>
     Object.values(state.agents).reduce((sum, agent) => sum + agent.pendingReviewCount, 0),
     [state.agents]
@@ -150,39 +138,29 @@ export function App({ router }: AppProps): React.JSX.Element {
         void router.interruptActiveWork();
         return;
       }
-
       void router.dispose().finally(exit);
       return;
     }
 
-    if (key.ctrl && value === 'p') {
-      navigateSelection(-1);
-      return;
-    }
-
-    if (key.ctrl && value === 'n') {
-      navigateSelection(1);
-      return;
-    }
-
-    if (key.ctrl && value === 'l') {
-      setSelectedMessageId(state.messages.at(-1)?.id ?? null);
-      return;
-    }
+    if (key.ctrl && value === 'p') { navigateSelection(-1); return; }
+    if (key.ctrl && value === 'n') { navigateSelection(1); return; }
+    if (key.ctrl && value === 'l') { setSelectedMessageId(state.messages.at(-1)?.id ?? null); return; }
 
     if (key.escape) {
       setInput('');
+      setCursor(0);
       setSelectedSuggestion(0);
       return;
     }
 
     if (key.tab) {
-      if (suggestions.length === 0) {
-        return;
-      }
-
+      if (suggestions.length === 0) return;
       const agent = suggestions[selectedSuggestion] ?? suggestions[0];
-      setInput((current) => applyMentionCompletion(current, agent));
+      setInput((current) => {
+        const next = applyMentionCompletion(current, agent);
+        setCursor(next.length);
+        return next;
+      });
       setSelectedSuggestion((current) => (suggestions.length === 0 ? 0 : (current + 1) % suggestions.length));
       return;
     }
@@ -201,13 +179,66 @@ export function App({ router }: AppProps): React.JSX.Element {
       return;
     }
 
+    if (key.leftArrow) {
+      if (key.meta || key.ctrl) {
+        setCursor(0);
+      } else {
+        setCursor((c) => Math.max(0, c - 1));
+      }
+      return;
+    }
+
+    if (key.rightArrow) {
+      if (key.meta || key.ctrl) {
+        setCursor(input.length);
+      } else {
+        setCursor((c) => Math.min(input.length, c + 1));
+      }
+      return;
+    }
+
+    // Ctrl+A: move to start
+    if (key.ctrl && value === 'a') { setCursor(0); return; }
+    // Ctrl+E: move to end
+    if (key.ctrl && value === 'e') { setCursor(input.length); return; }
+    // Ctrl+U: delete from cursor to start
+    if (key.ctrl && value === 'u') {
+      setInput((current) => { const next = current.slice(cursor); setCursor(0); return next; });
+      return;
+    }
+    // Ctrl+K: delete from cursor to end
+    if (key.ctrl && value === 'k') {
+      setInput((current) => current.slice(0, cursor));
+      return;
+    }
+    // Ctrl+W: delete word backwards
+    if (key.ctrl && value === 'w') {
+      setInput((current) => {
+        const before = current.slice(0, cursor);
+        const after = current.slice(cursor);
+        const trimmed = before.replace(/\S+\s*$/, '');
+        setCursor(trimmed.length);
+        return trimmed + after;
+      });
+      return;
+    }
+
     if (key.backspace || key.delete) {
-      setInput((current) => current.slice(0, -1));
+      setInput((current) => {
+        if (cursor <= 0) return current;
+        const next = current.slice(0, cursor - 1) + current.slice(cursor);
+        setCursor((c) => c - 1);
+        return next;
+      });
       return;
     }
 
     if (!key.ctrl && !key.meta && value) {
-      setInput((current) => current + value);
+      setInput((current) => {
+        const next = current.slice(0, cursor) + value + current.slice(cursor);
+        setCursor((c) => c + value.length);
+        return next;
+      });
     }
   });
 
@@ -221,10 +252,10 @@ export function App({ router }: AppProps): React.JSX.Element {
         sessionCount={state.sessionCount}
         messageCount={state.messages.length}
         liveCount={liveCount}
-        uiBeat={uiBeat}
+        shouldAnimate={shouldAnimate}
       />
-      <ContextPanel messages={state.messages} selectedMessageId={selectedMessageId} uiBeat={uiBeat} />
-      <MessageStream messages={state.messages} selectedMessageId={selectedMessageId} uiBeat={uiBeat} />
+      <ContextPanel messages={state.messages} selectedMessageId={selectedMessageId} shouldAnimate={shouldAnimate} />
+      <MessageStream messages={state.messages} selectedMessageId={selectedMessageId} shouldAnimate={shouldAnimate} />
       <StatusBar
         messageCount={state.messages.length}
         selectedIndex={selectedIndex}
@@ -234,17 +265,18 @@ export function App({ router }: AppProps): React.JSX.Element {
         disabledAgents={disabledAgents}
         submitting={submitting}
         liveCount={liveCount}
-        uiBeat={uiBeat}
+        shouldAnimate={shouldAnimate}
       />
       <InputBox
         input={input}
+        cursor={cursor}
         suggestions={suggestions}
         selectedSuggestion={selectedSuggestion}
         activeSuggestion={activeSuggestion}
         submitting={submitting}
         targetAgent={targetAgent}
         agentStates={state.agents}
-        uiBeat={uiBeat}
+        shouldAnimate={shouldAnimate}
       />
     </Box>
   );
@@ -270,6 +302,7 @@ export function App({ router }: AppProps): React.JSX.Element {
     try {
       const nextInput = input;
       setInput('');
+      setCursor(0);
       setSelectedSuggestion(0);
       await router.handleInput(nextInput);
       setSelectedMessageId(router.getState().messages.at(-1)?.id ?? selectedMessageId);

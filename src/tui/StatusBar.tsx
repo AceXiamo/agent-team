@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 
-import { meter, pulse, sweep } from './motion.js';
+import { meter, pulse, sweep, useAnimationBeat } from './motion.js';
 
 interface StatusBarProps {
   messageCount: number;
@@ -12,10 +12,10 @@ interface StatusBarProps {
   disabledAgents: string[];
   submitting: boolean;
   liveCount: number;
-  uiBeat: number;
+  shouldAnimate: boolean;
 }
 
-export function StatusBar({
+export const StatusBar = React.memo(function StatusBar({
   messageCount,
   selectedIndex,
   runningAgents,
@@ -24,8 +24,9 @@ export function StatusBar({
   disabledAgents,
   submitting,
   liveCount,
-  uiBeat
+  shouldAnimate
 }: StatusBarProps): React.JSX.Element {
+  const uiBeat = useAnimationBeat(shouldAnimate && (submitting || runningAgents.length > 0 || liveCount > 0));
   const isTail = selectedIndex === -1 || selectedIndex === messageCount - 1;
   const focusLabel = messageCount === 0
     ? 'empty'
@@ -84,4 +85,4 @@ export function StatusBar({
       <Text dimColor>Conversation + Context lane show delegation and review handoffs.</Text>
     </Box>
   );
-}
+});

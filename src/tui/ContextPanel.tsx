@@ -3,15 +3,16 @@ import { Box, Text } from 'ink';
 
 import type { Message } from '../types.js';
 import { collectConversationOverview, describeFocusedMessage } from './insights.js';
-import { pulse } from './motion.js';
+import { pulse, useAnimationBeat } from './motion.js';
 
 interface ContextPanelProps {
   messages: Message[];
   selectedMessageId: string | null;
-  uiBeat: number;
+  shouldAnimate: boolean;
 }
 
-export function ContextPanel({ messages, selectedMessageId, uiBeat }: ContextPanelProps): React.JSX.Element {
+export const ContextPanel = React.memo(function ContextPanel({ messages, selectedMessageId, shouldAnimate }: ContextPanelProps): React.JSX.Element {
+  const uiBeat = useAnimationBeat(shouldAnimate);
   const overview = collectConversationOverview(messages);
   const focused = describeFocusedMessage(messages, selectedMessageId);
   const stats = [
@@ -51,7 +52,7 @@ export function ContextPanel({ messages, selectedMessageId, uiBeat }: ContextPan
       <Text dimColor>{describeNextMove(messages, overview.liveMessages)}</Text>
     </Box>
   );
-}
+});
 
 function renderLane(messages: Message[], selectedMessageId: string | null, uiBeat: number): React.JSX.Element {
   const recent = messages.slice(-24);

@@ -4,29 +4,32 @@ import { Box, Text } from 'ink';
 import type { AgentName, AgentState } from '../types.js';
 import { AGENT_LABELS } from '../core/utils.js';
 import { describeDraft } from './insights.js';
-import { frame, sweep } from './motion.js';
+import { frame, sweep, useAnimationBeat } from './motion.js';
 
 interface InputBoxProps {
   input: string;
+  cursor: number;
   suggestions: AgentName[];
   selectedSuggestion: number;
   activeSuggestion: AgentName | null;
   submitting: boolean;
   targetAgent: AgentName | null;
   agentStates: Record<AgentName, AgentState>;
-  uiBeat: number;
+  shouldAnimate: boolean;
 }
 
-export function InputBox({
+export const InputBox = React.memo(function InputBox({
   input,
+  cursor,
   suggestions,
   selectedSuggestion,
   activeSuggestion,
   submitting,
   targetAgent,
   agentStates,
-  uiBeat
+  shouldAnimate
 }: InputBoxProps): React.JSX.Element {
+  const uiBeat = useAnimationBeat(shouldAnimate);
   const targetInfo = targetAgent ? getTargetInfo(targetAgent, agentStates) : null;
   const draft = describeDraft(input, agentStates);
   const borderColor = draft.state === 'error'
@@ -39,10 +42,8 @@ export function InputBox({
     : draft.state === 'ready'
       ? 'green'
       : targetInfo?.color ?? 'yellow';
-  const prompt = submitting
-    ? sweep(uiBeat)
-    : frame(uiBeat, input ? ['▏', '▎', '▍', '▋'] : ['>', '>', '>', '•']);
-  const inputLine = input || frame(uiBeat, ['type a request for one agent', 'type a request for one agent.', 'type a request for one agent..']);
+  const prompt = submitting ? sweep(uiBeat) : '>';
+  const placeholder = frame(uiBeat, ['type a request for one agent', 'type a request for one agent.', 'type a request for one agent..']);
   const routeLabel = targetInfo
     ? `route ${targetInfo.label} • ${targetInfo.statusText}`
     : 'route command center';
@@ -54,13 +55,13 @@ export function InputBox({
     <Box flexDirection="column" borderStyle="round" borderColor={borderColor} paddingX={1}>
       <Box justifyContent="space-between">
         <Text color={titleColor} bold>
-          {submitting ? sweep(uiBeat) : prompt} {draft.title}
+          {prompt} {draft.title}
         </Text>
-        <Text dimColor>{`${input.length} chars`}</Text>
+        <Text dimColor>{input.length > 0 ? `${cursor}/${input.length}` : ''}</Text>
       </Box>
       <Text>
         <Text color={titleColor}>{`${prompt} `}</Text>
-        {input ? <Text>{inputLine}</Text> : <Text dimColor>{inputLine}</Text>}
+        {input ? renderInputWithCursor(input, cursor, titleColor) : <Text dimColor>{placeholder}</Text>}
       </Text>
       <Text dimColor>{draft.detail}</Text>
       <Text dimColor>{routeLabel}</Text>
@@ -86,6 +87,21 @@ export function InputBox({
         <Text dimColor>Quick routes: `/new`, `/sessions`, `/switch session-id`, `/reset @Agent`.</Text>
       )}
     </Box>
+  );
+});
+
+function renderInputWithCursor(input: string, cursor: number, cursorColor: string): React.JSX.Element {
+  const safeCursor = Math.min(cursor, input.length);
+  const before = input.slice(0, safeCursor);
+  const atCursor = input[safeCursor] ?? ' ';
+  const after = input.slice(safeCursor + 1);
+
+  return (
+    <Text>
+      {before}
+      <Text backgroundColor={cursorColor} color="black">{atCursor}</Text>
+      {after}
+    </Text>
   );
 }
 

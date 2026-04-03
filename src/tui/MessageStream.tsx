@@ -3,19 +3,20 @@ import { Box, Text } from 'ink';
 
 import type { Message } from '../types.js';
 import { MessageBubble } from './MessageBubble.js';
-import { frame, pulse } from './motion.js';
+import { frame, pulse, useAnimationBeat } from './motion.js';
 
 interface MessageStreamProps {
   messages: Message[];
   selectedMessageId: string | null;
-  uiBeat: number;
+  shouldAnimate: boolean;
 }
 
-export function MessageStream({ messages, selectedMessageId, uiBeat }: MessageStreamProps): React.JSX.Element {
+export function MessageStream({ messages, selectedMessageId, shouldAnimate }: MessageStreamProps): React.JSX.Element {
+  const liveCount = messages.filter((message) => message.status === 'streaming').length;
+  const uiBeat = useAnimationBeat(shouldAnimate && liveCount > 0);
   const rows = process.stdout.rows ?? 24;
   const visibleCount = Math.max(4, rows - 24);
   const selectedIndex = selectedMessageId ? messages.findIndex((message) => message.id === selectedMessageId) : messages.length - 1;
-  const liveCount = messages.filter((message) => message.status === 'streaming').length;
 
   let start = Math.max(0, messages.length - visibleCount);
   if (selectedIndex !== -1) {
@@ -60,7 +61,7 @@ export function MessageStream({ messages, selectedMessageId, uiBeat }: MessageSt
         <Box flexDirection="column">
           {hiddenAbove > 0 ? <Text dimColor>{`↑ ${hiddenAbove} earlier message${hiddenAbove === 1 ? '' : 's'}`}</Text> : null}
           {visibleMessages.map((message) => (
-            <MessageBubble key={message.id} message={message} selected={message.id === selectedMessageId} uiBeat={uiBeat} />
+            <MessageBubble key={message.id} message={message} selected={message.id === selectedMessageId} shouldAnimate={shouldAnimate} />
           ))}
           {hiddenBelow > 0 ? <Text dimColor>{`↓ ${hiddenBelow} newer message${hiddenBelow === 1 ? '' : 's'}`}</Text> : null}
         </Box>

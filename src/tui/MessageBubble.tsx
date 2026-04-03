@@ -4,7 +4,7 @@ import { Box, Text } from 'ink';
 import type { Message, MessageContent, TokenUsage } from '../types.js';
 import { formatTimestamp, senderLabel } from '../core/utils.js';
 import { MarkdownText } from './MarkdownText.js';
-import { frame, orbit } from './motion.js';
+import { frame, orbit, useAnimationBeat } from './motion.js';
 
 function formatUsage(usage: TokenUsage): string {
   const parts: string[] = [];
@@ -18,12 +18,13 @@ function formatUsage(usage: TokenUsage): string {
 interface MessageBubbleProps {
   message: Message;
   selected: boolean;
-  uiBeat: number;
+  shouldAnimate: boolean;
 }
 
-export function MessageBubble({ message, selected, uiBeat }: MessageBubbleProps): React.JSX.Element {
-  const accent = getAccentColor(message);
+export const MessageBubble = React.memo(function MessageBubble({ message, selected, shouldAnimate }: MessageBubbleProps): React.JSX.Element {
   const isStreaming = message.status === 'streaming';
+  const uiBeat = useAnimationBeat(shouldAnimate && (selected || isStreaming));
+  const accent = getAccentColor(message);
   const usageText = !isStreaming && message.usage ? formatUsage(message.usage) : '';
   const marker = selected ? frame(uiBeat, ['▶', '▸', '▶', '▹']) : '•';
   const contentSummary = summarizeKinds(message.content);
@@ -55,7 +56,7 @@ export function MessageBubble({ message, selected, uiBeat }: MessageBubbleProps)
       </Box>
     </Box>
   );
-}
+}, (prev, next) => prev.message === next.message && prev.selected === next.selected && prev.shouldAnimate === next.shouldAnimate);
 
 function ContentBlock({ content }: { content: MessageContent }): React.JSX.Element {
   switch (content.type) {

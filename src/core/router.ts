@@ -22,11 +22,6 @@ interface RouterOptions {
   messageStore?: MessageLogStore;
 }
 
-interface PersistSnapshot {
-  sessionKey?: string;
-  messages: Message[];
-}
-
 type Listener = (state: AppState) => void;
 
 export class MessageRouter {
@@ -45,12 +40,12 @@ export class MessageRouter {
 
   private persistTimer: NodeJS.Timeout | null = null;
   private persistPromise = Promise.resolve();
-  private pendingPersist: PersistSnapshot | null = null;
+  private persistDirty = false;
   private state: AppState;
 
   private emitTimer: ReturnType<typeof setTimeout> | null = null;
   private emitQueued = false;
-  private static readonly EMIT_DELAY_MS = 80;
+  private static readonly EMIT_DELAY_MS = 150;
 
   private constructor(options: RouterOptions) {
     this.workdir = options.workdir;
@@ -237,17 +232,21 @@ export class MessageRouter {
   }
 
   toggleMessageExpansion(messageId: string): void {
-    const message = this.state.messages.find((item) => item.id === messageId);
-    if (!message) {
+    const index = this.state.messages.findIndex((item) => item.id === messageId);
+    if (index === -1) {
       return;
     }
 
-    message.content = message.content.map((content) => {
-      if (content.type === 'tool_use' || content.type === 'tool_result') {
-        return { ...content, collapsed: !content.collapsed };
-      }
-      return content;
-    });
+    const message = this.state.messages[index];
+    this.state.messages[index] = {
+      ...message,
+      content: message.content.map((content) => {
+        if (content.type === 'tool_use' || content.type === 'tool_result') {
+          return { ...content, collapsed: !content.collapsed };
+        }
+        return content;
+      })
+    };
 
     this.schedulePersist();
     this.emit();
@@ -565,7 +564,7 @@ export class MessageRouter {
   }
 
   private appendMessage(message: Message): void {
-    this.state.messages.push(message);
+    this.state.messages = [...this.state.messages, message];
     this.schedulePersist();
     this.emit();
   }
@@ -589,45 +588,53 @@ export class MessageRouter {
   }
 
   private pushContent(messageId: string, content: MessageContent): void {
-    const message = this.state.messages.find((item) => item.id === messageId);
-    if (!message) {
+    const index = this.state.messages.findIndex((item) => item.id === messageId);
+    if (index === -1) {
       return;
     }
 
+    const message = this.state.messages[index];
     const last = message.content.at(-1);
+    let newContent: MessageContent[];
+
     if (content.type === 'text' && last?.type === 'text') {
-      last.text += content.text;
+      newContent = [...message.content.slice(0, -1), { ...last, text: last.text + content.text }];
     } else if (content.type === 'thinking' && last?.type === 'thinking') {
-      last.text += `\n${content.text}`;
+      newContent = [...message.content.slice(0, -1), { ...last, text: last.text + `\n${content.text}` }];
     } else {
-      message.content.push(content);
+      newContent = [...message.content, content];
     }
 
+    this.state.messages[index] = { ...message, content: newContent };
     this.schedulePersist();
     this.scheduleEmit();
   }
 
   private updateMessageStatus(messageId: string, status: Message['status']): void {
-    const message = this.state.messages.find((item) => item.id === messageId);
-    if (!message) {
+    const index = this.state.messages.findIndex((item) => item.id === messageId);
+    if (index === -1) {
       return;
     }
-    message.status = status;
+    this.state.messages[index] = { ...this.state.messages[index], status };
     this.schedulePersist();
   }
 
   private mergeUsage(messageId: string, incoming: TokenUsage): void {
-    const message = this.state.messages.find((item) => item.id === messageId);
-    if (!message) {
+    const index = this.state.messages.findIndex((item) => item.id === messageId);
+    if (index === -1) {
       return;
     }
 
+    const message = this.state.messages[index];
     const prev = message.usage ?? {};
-    message.usage = {
-      inputTokens: (prev.inputTokens ?? 0) + (incoming.inputTokens ?? 0) || undefined,
-      cachedInputTokens: (prev.cachedInputTokens ?? 0) + (incoming.cachedInputTokens ?? 0) || undefined,
-      outputTokens: (prev.outputTokens ?? 0) + (incoming.outputTokens ?? 0) || undefined,
-      costUsd: (prev.costUsd ?? 0) + (incoming.costUsd ?? 0) || undefined
+    this.state.messages[index] = {
+      ...message,
+      usage: {
+        inputTokens: (prev.inputTokens ?? 0) + (incoming.inputTokens ?? 0) || undefined,
+        cachedInputTokens: (prev.cachedInputTokens ?? 0) + (incoming.cachedInputTokens ?? 0) || undefined,
+        outputTokens: (prev.outputTokens ?? 0) + (incoming.outputTokens ?? 0) || undefined,
+        costUsd: (prev.costUsd ?? 0) + (incoming.costUsd ?? 0) || undefined
+      }
     };
 
     this.schedulePersist();
@@ -684,18 +691,16 @@ export class MessageRouter {
   }
 
   private schedulePersist(): void {
-    this.pendingPersist = {
-      sessionKey: this.state.activeSessionId ?? undefined,
-      messages: structuredClone(this.state.messages)
-    };
+    this.persistDirty = true;
 
     if (this.persistTimer) {
-      clearTimeout(this.persistTimer);
+      return;
     }
 
     this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
       void this.flushPersist();
-    }, 25);
+    }, 500);
   }
 
   private async flushPersist(): Promise<void> {
@@ -704,12 +709,16 @@ export class MessageRouter {
       this.persistTimer = null;
     }
 
-    const snapshot = this.pendingPersist;
-    if (!snapshot) {
+    if (!this.persistDirty) {
       return;
     }
 
-    this.pendingPersist = null;
+    this.persistDirty = false;
+    const snapshot = {
+      sessionKey: this.state.activeSessionId ?? undefined,
+      messages: structuredClone(this.state.messages)
+    };
+
     this.persistPromise = this.persistPromise.then(() =>
       this.messageStore.save(this.workdirHash, snapshot.messages, snapshot.sessionKey)
     );
