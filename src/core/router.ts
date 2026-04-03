@@ -317,12 +317,12 @@ export class MessageRouter {
     agentState.lastError = null;
     this.syncAgentWorkState(task.target);
 
-    this.appendMessage(message);
-
     const contextSummary = buildContextSummary({
       target: task.target,
       messages: this.state.messages
     });
+
+    this.appendMessage(message);
 
     try {
       for await (const event of driver.send({

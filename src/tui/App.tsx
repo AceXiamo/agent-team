@@ -7,7 +7,7 @@ import type { AgentName, AppState } from '../types.js';
 import { ContextPanel } from './ContextPanel.js';
 import { Header } from './Header.js';
 import { InputBox } from './InputBox.js';
-import { MessageStream } from './MessageStream.js';
+import { MessageStream, type MessageStreamHandle } from './MessageStream.js';
 import { StatusBar } from './StatusBar.js';
 import { MessageRouter } from '../core/router.js';
 
@@ -26,6 +26,7 @@ export function App({ router }: AppProps): React.JSX.Element {
   const [selectedSuggestion, setSelectedSuggestion] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const previousLastMessageId = useRef<string | null>(state.messages.at(-1)?.id ?? null);
+  const messageStreamRef = useRef<MessageStreamHandle>(null);
 
   useEffect(() => router.subscribe(setState), [router]);
 
@@ -39,22 +40,26 @@ export function App({ router }: AppProps): React.JSX.Element {
       return;
     }
 
-    const handleFocusChange = (chunk: string | Buffer): void => {
-      const input = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk;
-      if (input.includes('\u001b[I')) {
+    const handleStdinData = (chunk: string | Buffer): void => {
+      const raw = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk;
+
+      if (raw.includes('\u001b[I')) {
         setTerminalFocused(true);
       }
-      if (input.includes('\u001b[O')) {
+      if (raw.includes('\u001b[O')) {
         setTerminalFocused(false);
       }
+
+      parseMouseWheel(raw, (delta) => messageStreamRef.current?.scrollBy(delta));
     };
 
-    process.stdout.write('\u001b[?1004h');
-    stdin.on('data', handleFocusChange);
+    // Enable focus reporting + SGR mouse tracking (wheel only needs button events)
+    process.stdout.write('\u001b[?1004h\u001b[?1000h\u001b[?1006h');
+    stdin.on('data', handleStdinData);
 
     return () => {
-      stdin.off('data', handleFocusChange);
-      process.stdout.write('\u001b[?1004l');
+      stdin.off('data', handleStdinData);
+      process.stdout.write('\u001b[?1006l\u001b[?1000l\u001b[?1004l');
     };
   }, [stdin]);
 
@@ -130,6 +135,11 @@ export function App({ router }: AppProps): React.JSX.Element {
 
   useInput((value, key) => {
     if (value === '[I' || value === '[O') {
+      return;
+    }
+
+    // SGR mouse sequences leak partial chars into useInput — discard them
+    if (/^\[<\d/.test(value) || /^\d+;\d+[Mm]/.test(value)) {
       return;
     }
 
@@ -249,7 +259,7 @@ export function App({ router }: AppProps): React.JSX.Element {
   return (
     <Box flexDirection="row" width={cols} height={rows} overflow="hidden">
       <Box flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden">
-        <MessageStream messages={state.messages} selectedMessageId={selectedMessageId} shouldAnimate={shouldAnimate} />
+        <MessageStream ref={messageStreamRef} messages={state.messages} selectedMessageId={selectedMessageId} shouldAnimate={shouldAnimate} />
         <StatusBar
           messageCount={state.messages.length}
           selectedIndex={selectedIndex}
@@ -328,4 +338,26 @@ function applyMentionCompletion(input: string, agent: AgentName): string {
   }
 
   return `${input.slice(0, index)}${mention} `;
+}
+
+/**
+ * Parse SGR-encoded mouse wheel events from raw stdin data and invoke
+ * the scroll callback with line-level deltas.
+ * SGR format: \x1b[<button;col;rowM (press) or m (release).
+ * Wheel up = button 64, wheel down = button 65.
+ */
+const SGR_MOUSE_RE = /\x1b\[<(\d+);\d+;\d+[Mm]/g;
+const WHEEL_SCROLL_LINES = 3;
+
+function parseMouseWheel(raw: string, scroll: (delta: number) => void): void {
+  let match: RegExpExecArray | null;
+  while ((match = SGR_MOUSE_RE.exec(raw)) !== null) {
+    const button = Number(match[1]);
+    if (button === 64) {
+      scroll(-WHEEL_SCROLL_LINES);
+    } else if (button === 65) {
+      scroll(WHEEL_SCROLL_LINES);
+    }
+  }
+  SGR_MOUSE_RE.lastIndex = 0;
 }

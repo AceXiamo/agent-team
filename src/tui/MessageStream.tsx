@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useRef } from 'react';
 import { Box, Text } from 'ink';
 import { ScrollView, type ScrollViewRef } from 'ink-scroll-view';
 
@@ -6,13 +6,18 @@ import type { Message } from '../types.js';
 import { MessageBubble } from './MessageBubble.js';
 import { pulse, useAnimationBeat } from './motion.js';
 
+export interface MessageStreamHandle {
+  scrollBy: (delta: number) => void;
+}
+
 interface MessageStreamProps {
   messages: Message[];
   selectedMessageId: string | null;
   shouldAnimate: boolean;
 }
 
-export function MessageStream({ messages, selectedMessageId, shouldAnimate }: MessageStreamProps): React.JSX.Element {
+export const MessageStream = React.forwardRef<MessageStreamHandle, MessageStreamProps>(
+  function MessageStream({ messages, selectedMessageId, shouldAnimate }, ref) {
   const scrollRef = useRef<ScrollViewRef>(null);
   const liveCount = messages.filter((message) => message.status === 'streaming').length;
   const uiBeat = useAnimationBeat(shouldAnimate && liveCount > 0);
@@ -61,6 +66,15 @@ export function MessageStream({ messages, selectedMessageId, shouldAnimate }: Me
     return () => { process.stdout.off('resize', onResize); };
   }, []);
 
+  useImperativeHandle(ref, () => ({
+    scrollBy(delta: number) {
+      const sv = scrollRef.current;
+      if (!sv) return;
+      sv.scrollBy(delta);
+      autoScrollRef.current = sv.getScrollOffset() >= sv.getBottomOffset() - 1;
+    }
+  }), []);
+
   return (
     <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor="blue" paddingX={1} overflow="hidden">
       <Box justifyContent="space-between">
@@ -87,7 +101,7 @@ export function MessageStream({ messages, selectedMessageId, shouldAnimate }: Me
       )}
     </Box>
   );
-}
+});
 
 function EmptyState(): React.JSX.Element {
   return (

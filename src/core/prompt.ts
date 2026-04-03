@@ -3,6 +3,7 @@ import { AGENT_LABELS, summarizeText } from './utils.js';
 
 const DEFAULT_SUMMARY_MAX_CHARS = 2000;
 const AGENT_TEXT_LIMIT = 300;
+const HUMAN_TEXT_LIMIT = 500;
 const TOOL_LIST_LIMIT = 120;
 
 interface PromptOptions {
@@ -66,7 +67,10 @@ interface ContextSummaryOptions {
 export function buildContextSummary(options: ContextSummaryOptions): string | null {
   const { target, messages, maxChars = DEFAULT_SUMMARY_MAX_CHARS } = options;
 
-  const lastTargetIndex = findLastIndex(messages, (m) => m.sender === target);
+  // Skip streaming placeholders from the target when finding the boundary.
+  // The router calls buildContextSummary before appending, but this makes the
+  // function safe to call at any point.
+  const lastTargetIndex = findLastIndex(messages, (m) => m.sender === target && m.status !== 'streaming');
   const startIndex = lastTargetIndex === -1 ? 0 : lastTargetIndex + 1;
 
   const summaryLines: string[] = [];
@@ -102,7 +106,7 @@ function summarizeMessage(message: Message): string | null {
     switch (block.type) {
       case 'text': {
         const text = sender === 'human'
-          ? block.text.trim()
+          ? summarizeText(block.text, HUMAN_TEXT_LIMIT)
           : summarizeText(block.text, AGENT_TEXT_LIMIT);
         if (text) {
           parts.push(text);
