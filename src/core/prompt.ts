@@ -188,9 +188,10 @@ function buildCollaborationInstructions(options: PromptOptions, sourceLabel: str
     case 'user_request':
       return [
         'You are the main owner of this user request.',
-        'You may delegate to other agents, but you remain responsible for completeness and correctness.',
-        'If you delegate, review or synthesize the returned work instead of forwarding it blindly.',
-        'Only conclude to the human user once delegated work has been checked or incorporated.'
+        'Actively collaborate with team members — break complex tasks into focused slices and delegate them one at a time.',
+        'You may only delegate to ONE agent per response. Never emit more than one delegation block in a single reply.',
+        'Wait for the delegated result to come back before delegating further or concluding.',
+        'You remain responsible for completeness and correctness; review or synthesize all returned work before answering the user.'
       ];
   }
 }

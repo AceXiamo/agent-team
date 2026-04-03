@@ -581,8 +581,15 @@ export class MessageRouter {
       this.pushContent(messageId, { type: 'text', text: displayText });
     }
 
-    for (const request of requests) {
-      this.handleDelegateRequest(source, request.target, request.message);
+    if (requests.length > 1) {
+      this.appendSystemMessage(
+        `${source} tried to delegate to ${requests.length} agents at once. Only the first delegation (to ${requests[0].target}) will be processed.`,
+        'error'
+      );
+    }
+
+    if (requests.length > 0) {
+      this.handleDelegateRequest(source, requests[0].target, requests[0].message);
     }
 
     for (const error of errors) {

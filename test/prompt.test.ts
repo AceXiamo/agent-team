@@ -13,7 +13,8 @@ describe('buildAgentPrompt', () => {
     });
 
     expect(prompt).toContain('You are the main owner of this user request.');
-    expect(prompt).toContain('If you delegate, review or synthesize the returned work instead of forwarding it blindly.');
+    expect(prompt).toContain('You may only delegate to ONE agent per response. Never emit more than one delegation block in a single reply.');
+    expect(prompt).toContain('You remain responsible for completeness and correctness; review or synthesize all returned work before answering the user.');
   });
 
   it('marks delegated work as a supporting slice for the owner', () => {
