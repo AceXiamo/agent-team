@@ -7,7 +7,7 @@ export class ClaudeDriver extends BaseJsonlDriver {
   protected readonly binary = 'claude';
 
   protected buildArgs(opts: SendOptions): string[] {
-    const args = ['-p', opts.prompt, '--output-format', 'stream-json', '--verbose'];
+    const args = ['-p', opts.prompt, '--output-format', 'stream-json', '--verbose', '--dangerously-skip-permissions'];
     if (opts.sessionId) {
       args.push('--resume', opts.sessionId);
     }

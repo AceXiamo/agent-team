@@ -58,18 +58,19 @@ type AgentEvent =
 #### 新建
 
 ```bash
-claude -p "<prompt>" --output-format stream-json --verbose
+claude -p "<prompt>" --output-format stream-json --verbose --dangerously-skip-permissions
 ```
 
 #### Resume
 
 ```bash
-claude -p "<prompt>" --resume <sessionId> --output-format stream-json --verbose
+claude -p "<prompt>" --resume <sessionId> --output-format stream-json --verbose --dangerously-skip-permissions
 ```
 
 ### 已验证注意事项
 
 - 当前环境里 `--output-format stream-json` 需要配合 `--verbose`
+- 当前环境里如果不加 `--dangerously-skip-permissions`，`Write/Edit` 等工具会停在权限拒绝，无法在无人值守模式下落盘
 - 当前环境里 `--no-color` 不是通用可用 flag，不应默认加入
 - `-p` 等价于 `--print`
 

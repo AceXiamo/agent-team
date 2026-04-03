@@ -95,10 +95,10 @@ type AgentEvent =
 
 ```bash
 # 新建 session
-claude -p "<prompt>" --output-format stream-json
+claude -p "<prompt>" --output-format stream-json --verbose --dangerously-skip-permissions
 
 # Resume session
-claude -p "<prompt>" --resume <sessionId> --output-format stream-json
+claude -p "<prompt>" --resume <sessionId> --output-format stream-json --verbose --dangerously-skip-permissions
 ```
 
 - 输出格式：JSONL stream，每行一个事件

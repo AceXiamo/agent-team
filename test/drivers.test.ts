@@ -12,7 +12,8 @@ describe('driver argument builders', () => {
       'hello',
       '--output-format',
       'stream-json',
-      '--verbose'
+      '--verbose',
+      '--dangerously-skip-permissions'
     ]);
   });
 
