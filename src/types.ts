@@ -1,4 +1,4 @@
-export type AgentName = 'claude' | 'codex' | 'kimi';
+export type AgentName = 'claude' | 'codex' | 'kimi' | 'copilot';
 
 export type Sender = 'human' | 'system' | AgentName;
 export type CollaborationMode = 'user_request' | 'delegated_work' | 'review_handoff';

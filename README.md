@@ -44,13 +44,13 @@
 
 ## Motivation
 
-Claude Code、Codex、Kimi CLI 都很强，但它们各自为政。当你想让一个分析代码、另一个写实现、第三个做 review，你就变成了人肉消息中转站——复制输出、粘贴输入、来回切窗口。
+Claude Code、Codex、Kimi CLI、Copilot CLI 都很强，但它们各自为政。当你想让一个分析代码、另一个写实现、第三个做 review，你就变成了人肉消息中转站——复制输出、粘贴输入、来回切窗口。
 
 agent-team 让你在一个终端里像群聊一样调度它们。Agent 之间可以自动委派任务，你只需要在起点下命令、在终点看结果。
 
 ## Quick Start
 
-> **前提**：Node.js >= 24，且至少装了 `claude`、`codex`、`kimi` 三个 CLI 之一。
+> **前提**：Node.js >= 24，且至少装了 `claude`、`codex`、`kimi`、`copilot` 四个 CLI 之一。
 
 ```bash
 # 克隆 & 安装
@@ -75,6 +75,7 @@ npm run build && npm start
 @Claude 帮我把这个函数重构成 async 的
 @Codex 看一下 src/ 目录，找出所有未使用的 export
 @Kimi review 一下最近三次 commit
+@Copilot 帮我梳理一下这个 workspace 的入口和状态流
 ```
 
 一条消息里 `@` 一个 Agent，它就开始干活。流式输出实时显示在消息流里。
@@ -132,13 +133,13 @@ npm run build && npm start
                      │   │   │
               ┌──────┘   │   └──────┐
               ▼          ▼          ▼
-        ┌──────────┐┌──────────┐┌──────────┐
-        │  Claude  ││  Codex   ││   Kimi   │
-        │  Driver  ││  Driver  ││  Driver  │
-        └────┬─────┘└────┬─────┘└────┬─────┘
-             │           │           │
-             ▼           ▼           ▼
-         claude CLI   codex CLI   kimi CLI
+        ┌──────────┐┌──────────┐┌──────────┐┌──────────┐
+        │  Claude  ││  Codex   ││   Kimi   ││ Copilot  │
+        │  Driver  ││  Driver  ││  Driver  ││  Driver  │
+        └────┬─────┘└────┬─────┘└────┬─────┘└────┬─────┘
+             │           │           │           │
+             ▼           ▼           ▼           ▼
+         claude CLI   codex CLI   kimi CLI   copilot CLI
 ```
 
 **三个核心原则**：
@@ -165,6 +166,7 @@ src/
 │   ├── claude.ts           Claude Code
 │   ├── codex.ts            Codex
 │   ├── kimi.ts             Kimi CLI
+│   ├── copilot.ts          Copilot CLI
 │   └── index.ts            默认 registry
 └── tui/
     ├── App.tsx             根组件 + 键盘处理

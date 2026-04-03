@@ -2,7 +2,7 @@ import { buildAgentPrompt, buildContextSummary } from './prompt.js';
 import { parseUserInput } from './commandParser.js';
 import { DelegationParser } from './delegation.js';
 import { MessageLogStore, SessionStore } from './persistence.js';
-import { createEmptyAgentState, createId, hashWorkdir, summarizeText, AGENTS } from './utils.js';
+import { createAgentRecord, createEmptyAgentState, createId, hashWorkdir, summarizeText, AGENTS } from './utils.js';
 import { DriverRegistry } from './registry.js';
 
 import type { AgentName, AppState, Message, MessageContent, Sender, SessionInfo, TokenUsage } from '../types.js';
@@ -32,11 +32,7 @@ export class MessageRouter {
   private readonly messageStore: MessageLogStore;
   private readonly listeners = new Set<Listener>();
   private readonly cancelledRuns = new Set<string>();
-  private readonly queues: Record<AgentName, PendingTask[]> = {
-    claude: [],
-    codex: [],
-    kimi: []
-  };
+  private readonly queues: Record<AgentName, PendingTask[]> = createAgentRecord(() => []);
 
   private persistTimer: NodeJS.Timeout | null = null;
   private persistPromise = Promise.resolve();
@@ -59,11 +55,7 @@ export class MessageRouter {
       activeSessionId: null,
       activeSessionTitle: null,
       sessionCount: 0,
-      agents: {
-        claude: createEmptyAgentState('claude'),
-        codex: createEmptyAgentState('codex'),
-        kimi: createEmptyAgentState('kimi')
-      }
+      agents: createAgentRecord((agent) => createEmptyAgentState(agent))
     };
   }
 
@@ -688,11 +680,7 @@ export class MessageRouter {
     return {
       ...this.state,
       messages: [...this.state.messages],
-      agents: {
-        claude: { ...this.state.agents.claude },
-        codex: { ...this.state.agents.codex },
-        kimi: { ...this.state.agents.kimi }
-      }
+      agents: createAgentRecord((agent) => ({ ...this.state.agents[agent] }))
     };
   }
 
@@ -767,7 +755,7 @@ export class MessageRouter {
 }
 
 function isAgentSender(sender: Sender): sender is AgentName {
-  return sender === 'claude' || sender === 'codex' || sender === 'kimi';
+  return AGENTS.includes(sender as AgentName);
 }
 
 function buildReviewHandoffPrompt(source: AgentName, message: Message): string {

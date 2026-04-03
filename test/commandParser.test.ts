@@ -63,7 +63,7 @@ describe('parseUserInput', () => {
 
 describe('extractMentionCandidates', () => {
   it('finds matching mention candidates', () => {
-    expect(extractMentionCandidates('ping @c')).toEqual(['claude', 'codex']);
+    expect(extractMentionCandidates('ping @c')).toEqual(['claude', 'codex', 'copilot']);
   });
 
   it('stops matching after whitespace', () => {

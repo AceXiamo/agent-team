@@ -177,7 +177,8 @@ describe('MessageRouter', () => {
     const registry = new DriverRegistry([
       new MockDriver('claude'),
       new BlockingDriver('codex'),
-      new MockDriver('kimi')
+      new MockDriver('kimi'),
+      new MockDriver('copilot')
     ]);
 
     const router = await MessageRouter.create({
@@ -224,7 +225,7 @@ describe('MessageRouter', () => {
   it('restores message log on restart', async () => {
     const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-team-router-'));
     tempDirs.push(baseDir);
-    const registry = new DriverRegistry([new MockDriver('claude'), new MockDriver('codex'), new MockDriver('kimi')]);
+    const registry = new DriverRegistry([new MockDriver('claude'), new MockDriver('codex'), new MockDriver('kimi'), new MockDriver('copilot')]);
 
     const first = await MessageRouter.create({
       workdir: testWorkdir(),
@@ -478,6 +479,7 @@ async function createRouter(scenarios: {
   codexExtra?: AgentEvent[];
   claude?: AgentEvent[];
   kimi?: AgentEvent[];
+  copilot?: AgentEvent[];
 }): Promise<{ router: MessageRouter; baseDir: string }> {
   const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-team-router-'));
   tempDirs.push(baseDir);
@@ -487,7 +489,8 @@ async function createRouter(scenarios: {
       'codex',
       [scenarios.codex ?? [{ type: 'done', sessionId: 'codex-session' }], scenarios.codexExtra ?? [{ type: 'done', sessionId: 'codex-session-2' }]]
     ),
-    new MockDriver('kimi', scenarios.kimi ? [scenarios.kimi] : undefined)
+    new MockDriver('kimi', scenarios.kimi ? [scenarios.kimi] : undefined),
+    new MockDriver('copilot', scenarios.copilot ? [scenarios.copilot] : undefined)
   ]);
 
   const router = await MessageRouter.create({

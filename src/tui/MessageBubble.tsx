@@ -165,6 +165,8 @@ function getAccentColor(message: Message): string {
       return 'cyan';
     case 'kimi':
       return 'green';
+    case 'copilot':
+      return 'white';
   }
 }
 

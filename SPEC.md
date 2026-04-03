@@ -8,7 +8,7 @@
 
 ### 背景
 
-现有的 AI coding 工具（Codex、Claude Code、Kimi CLI 等）各自独立运行，协作时人需要手动在工具间 relay 信息——复制输出、粘贴输入、做中转。这不是真正的委派，而是人扮演了消息总线。
+现有的 AI coding 工具（Codex、Claude Code、Kimi CLI、Copilot CLI 等）各自独立运行，协作时人需要手动在工具间 relay 信息——复制输出、粘贴输入、做中转。这不是真正的委派，而是人扮演了消息总线。
 
 `agent-team` 的目标是把这个过程自动化：提供一个类 IM 的对话界面，让你像在群聊里 @ 人一样指派任务给 Agent，Agent 之间也可以互相协作，你只在两端：**下命令 + 看结果**。
 
@@ -18,7 +18,8 @@
 你（Human）
  ├─ @Claude  → 驱动本地 Claude Code 进程
  ├─ @Codex   → 驱动本地 Codex 进程
- └─ @Kimi    → 驱动本地 Kimi CLI 进程
+ ├─ @Kimi    → 驱动本地 Kimi CLI 进程
+ └─ @Copilot → 驱动本地 Copilot CLI 进程
 
 典型工作流：
 1. 你 → @Codex: "看一下 src/ 的代码，和 @Claude 讨论一下，给我一份重构方案"
@@ -49,7 +50,7 @@
 所有消息（包括 Agent 间通信）都经过 app 路由。Agent 不直接互相调用，而是通过 app 转发——这样你随时可以看到完整的消息流，也可以在任意节点介入或中断。
 
 **3. 模块化 Agent 接入层**
-每个 Agent 是一个独立的 Driver 实现，遵循统一接口。新增 Agent 只需实现接口，不改动上层逻辑。当前支持 3 个，后续（如 Cursor Agent 等待官方 headless API 支持）可以直接插入。
+每个 Agent 是一个独立的 Driver 实现，遵循统一接口。新增 Agent 只需实现接口，不改动上层逻辑。当前支持 4 个，后续（如 Cursor Agent 等待官方 headless API 支持）可以直接插入。
 
 **4. IM 优先的交互范式**
 界面设计对标 IM 应用：消息流 + @ mention + 发送者标签。不做复杂的命令系统，自然语言就是指令。
@@ -62,8 +63,8 @@
 
 ```typescript
 interface AgentDriver {
-  readonly name: string        // "claude" | "codex" | "kimi"
-  readonly displayName: string // "Claude Code" | "Codex" | "Kimi"
+  readonly name: string        // "claude" | "codex" | "kimi" | "copilot"
+  readonly displayName: string // "Claude Code" | "Codex" | "Kimi" | "Copilot CLI"
 
   /**
    * 发起一次对话（新建 session 或 resume）
@@ -97,7 +98,7 @@ type AgentEvent =
   | { type: 'error';      message: string }
 ```
 
-### 三个 Driver 实现
+### 四个 Driver 实现
 
 #### ClaudeDriver
 
@@ -118,6 +119,20 @@ claude -p "<prompt>" --resume <sessionId> --output-format stream-json --verbose 
 ```bash
 # 新建 session
 codex exec "<prompt>" --json --full-auto
+
+#### CopilotDriver
+
+```bash
+# 新建 session
+copilot --prompt "<prompt>" --output-format json --allow-all --stream off --no-color
+
+# Resume session
+copilot --prompt "<prompt>" --output-format json --allow-all --stream off --no-color --resume=<sessionId>
+```
+
+- 输出格式：JSONL stream，每行一个事件
+- Session ID：从最终 `result.sessionId` 提取
+- 已验证事件：`assistant.message`、`assistant.reasoning`、`tool.execution_start`、`tool.execution_complete`、`result`
 
 # Resume session
 codex resume <sessionId> --json
@@ -228,7 +243,7 @@ MessageRouter.route(message)
 // 一条消息
 interface Message {
   id: string
-  sender: 'human' | AgentName   // 'human' | 'claude' | 'codex' | 'kimi'
+  sender: 'human' | AgentName   // 'human' | 'claude' | 'codex' | 'kimi' | 'copilot'
   content: MessageContent[]
   timestamp: Date
   status: 'streaming' | 'done' | 'error'
@@ -263,7 +278,8 @@ Session ID 存储在本地 `~/.agent-team/sessions.json`，格式：
   "workdir_hash": {
     "claude": "sess_abc123",
     "codex":  "rollout-2026-04-03T...",
-    "kimi":   "kimi_sess_xyz"
+    "kimi":   "kimi_sess_xyz",
+    "copilot": "495c98c2-ff5c-4d93-a8d9-bd961c1cd458"
   }
 }
 ```

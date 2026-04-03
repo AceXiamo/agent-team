@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ClaudeDriver } from '../src/drivers/claude.js';
+import { CopilotDriver } from '../src/drivers/copilot.js';
 import { CodexDriver } from '../src/drivers/codex.js';
 import { KimiDriver } from '../src/drivers/kimi.js';
 
@@ -58,6 +59,37 @@ describe('driver argument builders', () => {
       '/tmp',
       '--resume',
       'sess'
+    ]);
+  });
+
+  it('builds copilot args', () => {
+    const driver = new CopilotDriver();
+    expect(readBuildArgs(driver, { prompt: 'hello', runId: 'run-1', workdir: '/tmp' })).toEqual([
+      '--prompt',
+      'hello',
+      '--output-format',
+      'json',
+      '--allow-all',
+      '--stream',
+      'off',
+      '--no-color'
+    ]);
+  });
+
+  it('builds copilot resume args', () => {
+    const driver = new CopilotDriver();
+    expect(
+      readBuildArgs(driver, { prompt: 'follow-up', runId: 'run-1', workdir: '/tmp', sessionId: 'sess' })
+    ).toEqual([
+      '--prompt',
+      'follow-up',
+      '--output-format',
+      'json',
+      '--allow-all',
+      '--stream',
+      'off',
+      '--no-color',
+      '--resume=sess'
     ]);
   });
 });
@@ -211,6 +243,72 @@ describe('driver line normalization', () => {
     expect(readMapLine(driver, { type: 'tool_use', tool: 'read_file', input: { path: 'x' } })).toEqual([
       { type: 'tool_use', tool: 'read_file', input: { path: 'x' } }
     ]);
+  });
+
+  it('normalizes copilot assistant messages and usage', () => {
+    const driver = new CopilotDriver();
+    expect(
+      readMapLine(driver, {
+        type: 'assistant.message',
+        data: {
+          content: 'hi from copilot',
+          outputTokens: 6
+        }
+      })
+    ).toEqual([
+      { type: 'text', content: 'hi from copilot' },
+      { type: 'usage', usage: { outputTokens: 6 } }
+    ]);
+  });
+
+  it('normalizes copilot reasoning events', () => {
+    const driver = new CopilotDriver();
+    expect(
+      readMapLine(driver, {
+        type: 'assistant.reasoning',
+        data: {
+          content: 'Let me inspect the repo.'
+        }
+      })
+    ).toEqual([{ type: 'thinking', content: 'Let me inspect the repo.' }]);
+  });
+
+  it('normalizes copilot tool execution events', () => {
+    const driver = new CopilotDriver();
+    expect(
+      readMapLine(driver, {
+        type: 'tool.execution_start',
+        data: {
+          toolName: 'bash',
+          arguments: {
+            command: 'ls'
+          }
+        }
+      })
+    ).toEqual([{ type: 'tool_use', tool: 'bash', input: { command: 'ls' } }]);
+
+    expect(
+      readMapLine(driver, {
+        type: 'tool.execution_complete',
+        data: {
+          toolName: 'bash',
+          result: {
+            detailedContent: 'README.md'
+          }
+        }
+      })
+    ).toEqual([{ type: 'tool_result', tool: 'bash', output: 'README.md' }]);
+  });
+
+  it('captures copilot result session ids', () => {
+    const driver = new CopilotDriver();
+    expect(
+      readMapLine(driver, {
+        type: 'result',
+        sessionId: 'copilot-session',
+        exitCode: 0
+      })
+    ).toEqual([{ type: 'done', sessionId: 'copilot-session' }]);
   });
 });
 

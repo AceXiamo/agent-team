@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { AgentName, Message, PersistedMessage, SessionInfo, WorkspaceSessions } from '../types.js';
-import { AGENTS } from './utils.js';
+import { AGENTS, createAgentRecord } from './utils.js';
 
 export class SessionStore {
   private readonly filePath: string;
@@ -240,11 +240,7 @@ function cloneSession(session: SessionInfo): SessionInfo {
 }
 
 function defaultAgentEnabled(): Record<AgentName, boolean> {
-  return {
-    claude: true,
-    codex: true,
-    kimi: true
-  };
+  return createAgentRecord(() => true);
 }
 
 function normalizeAgentEnabled(value: unknown): Record<AgentName, boolean> {
@@ -254,11 +250,7 @@ function normalizeAgentEnabled(value: unknown): Record<AgentName, boolean> {
   }
 
   const candidate = value as Record<string, unknown>;
-  return {
-    claude: typeof candidate.claude === 'boolean' ? candidate.claude : defaults.claude,
-    codex: typeof candidate.codex === 'boolean' ? candidate.codex : defaults.codex,
-    kimi: typeof candidate.kimi === 'boolean' ? candidate.kimi : defaults.kimi
-  };
+  return createAgentRecord((agent) => (typeof candidate[agent] === 'boolean' ? (candidate[agent] as boolean) : defaults[agent]));
 }
 
 async function readJson<T>(filePath: string, fallback: T): Promise<T> {

@@ -75,7 +75,9 @@ function renderLane(messages: Message[], selectedMessageId: string | null, uiBea
                 ? 'magenta'
                 : message.sender === 'codex'
                   ? 'cyan'
-                  : 'green';
+                  : message.sender === 'kimi'
+                    ? 'green'
+                    : 'white';
         const glyph = selected
           ? '▣'
           : message.status === 'streaming'

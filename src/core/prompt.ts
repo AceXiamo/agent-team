@@ -27,7 +27,7 @@ export function buildAgentPrompt(options: PromptOptions): string {
     '',
     'If you need another agent to do work, emit a fenced block with info string "agent-team" and valid JSON only:',
     '```agent-team',
-    '{"action":"delegate","target":"claude|codex|kimi","message":"clear task for the other agent"}',
+    '{"action":"delegate","target":"claude|codex|kimi|copilot","message":"clear task for the other agent"}',
     '```',
     'Do not use plain-text @mentions for delegation. The app only parses the fenced control block.',
     '',

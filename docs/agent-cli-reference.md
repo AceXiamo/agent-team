@@ -17,7 +17,7 @@
 
 ```ts
 interface AgentDriver {
-  readonly name: 'claude' | 'codex' | 'kimi'
+  readonly name: 'claude' | 'codex' | 'kimi' | 'copilot'
   readonly displayName: string
 
   send(opts: SendOptions): AsyncIterable<AgentEvent>
@@ -401,6 +401,139 @@ Kimi 当前还没有像 Codex 那样完成 live 样本归档，解析先按 Clau
 | `assistant.message.content[].tool_use` | `tool_use` |
 | `tool_result` | `tool_result` |
 | `result.session_id` | `done(sessionId)` |
+
+---
+
+## Copilot CLI
+
+**二进制：** `copilot`
+
+### 调用方式
+
+#### 新建
+
+```bash
+copilot --prompt "<prompt>" \
+  --output-format json \
+  --allow-all \
+  --stream off \
+  --no-color
+```
+
+#### Resume
+
+```bash
+copilot --prompt "<prompt>" \
+  --output-format json \
+  --allow-all \
+  --stream off \
+  --no-color \
+  --resume=<sessionId>
+```
+
+### 为什么当前版本满足接入条件
+
+- 支持非交互 `--prompt` 模式，stdout 可切到 `--output-format json`
+- 最终 `result.sessionId` 可直接作为 resume 标识
+- 同一 session 可通过 `--resume=<sessionId>` 续跑
+- CLI 自带工具调用事件，能显式区分正文、reasoning、tool start、tool complete
+- 另有 `--acp` 模式，可作为未来更强的结构化接入方向；当前 `agent-team` 先走 JSONL driver 即可
+
+### 已验证注意事项
+
+- 非交互模式下如果不放开权限，工具调用会卡在确认流；当前 driver 默认使用 `--allow-all`
+- `--stream off` 仍会输出结构化 JSONL 事件流，不影响解析 tool/reasoning/result
+- 实测版本 `1.0.11` 已满足上述行为；本机提示可升级到 `1.0.17`
+- 当前 driver 只依赖 JSONL 协议，不依赖 Copilot 的 TUI 或 ACP client
+
+### 已验证的 live stdout 结构
+
+#### 最小成功样本
+
+```json
+{"type":"assistant.message","data":{"content":"hi","toolRequests":[],"outputTokens":4}}
+{"type":"result","sessionId":"c8ef7347-bf1e-49b9-af92-564a7193ec58","exitCode":0}
+```
+
+#### 含工具调用样本
+
+```jsonc
+{
+  "type": "assistant.reasoning",
+  "data": {
+    "content": "Let me read the package.json file."
+  }
+}
+
+{
+  "type": "tool.execution_start",
+  "data": {
+    "toolName": "bash",
+    "arguments": {
+      "command": "node -e \"console.log(require('./package.json').name)\""
+    }
+  }
+}
+
+{
+  "type": "tool.execution_complete",
+  "data": {
+    "toolName": "bash",
+    "result": {
+      "detailedContent": "agent-team\n<exited with exit code 0>"
+    }
+  }
+}
+
+{
+  "type": "assistant.message",
+  "data": {
+    "content": "`agent-team`",
+    "toolRequests": [],
+    "outputTokens": 8
+  }
+}
+
+{
+  "type": "result",
+  "sessionId": "495c98c2-ff5c-4d93-a8d9-bd961c1cd458",
+  "exitCode": 0
+}
+```
+
+### session 提取策略
+
+- 直接使用 `result.sessionId`
+- resume 时透传 `--resume=<sessionId>`
+- 当前没有观察到像 Codex 那样必须回退到 thread id 的情况
+
+### 统一映射
+
+| Copilot stdout 事件 | 统一 `AgentEvent` |
+|---|---|
+| `assistant.message.data.content` | `text` |
+| `assistant.message.data.outputTokens` | `usage.outputTokens` |
+| `assistant.reasoning.data.content` | `thinking` |
+| `tool.execution_start.data.toolName` | `tool_use` |
+| `tool.execution_complete.data.result` | `tool_result` |
+| `result.sessionId` | `done(sessionId)` |
+| `result.exitCode !== 0` | `error` |
+
+### 当前 driver 已显式处理的顶层 `type`
+
+| 顶层 `type` | 当前处理方式 |
+|---|---|
+| `assistant.message` | 映射正文文本，并提取 `outputTokens` |
+| `assistant.reasoning` | 映射 `thinking` |
+| `tool.execution_start` | 映射 `tool_use` |
+| `tool.execution_complete` | 映射 `tool_result` |
+| `result` | 读取 `sessionId` / `exitCode` |
+
+### 为什么暂时不用 ACP
+
+- `agent-team` 当前 driver 层已经统一建立在“spawn CLI + 解析 stdout JSONL”上
+- Copilot CLI 的 JSONL 已经能覆盖当前 app 需要的核心能力：正文、thinking、tool、done、resume
+- `--acp` 更适合后续做更深的会话控制或外部编排；不是本次最短接入路径
 
 ---
 

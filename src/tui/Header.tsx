@@ -3,13 +3,13 @@ import path from 'node:path';
 import React from 'react';
 import { Box, Text } from 'ink';
 
-import type { AgentState } from '../types.js';
-import { AGENT_LABELS } from '../core/utils.js';
+import type { AgentName, AgentState } from '../types.js';
+import { AGENT_LABELS, AGENTS } from '../core/utils.js';
 import { meter, orbit, pulse, sweep, useAnimationBeat } from './motion.js';
 
 interface HeaderProps {
   workdir: string;
-  agents: Record<'claude' | 'codex' | 'kimi', AgentState>;
+  agents: Record<AgentName, AgentState>;
   activeSessionId: string | null;
   activeSessionTitle: string | null;
   sessionCount: number;
@@ -18,7 +18,7 @@ interface HeaderProps {
   shouldAnimate: boolean;
 }
 
-const AGENT_ORDER: Array<'claude' | 'codex' | 'kimi'> = ['claude', 'codex', 'kimi'];
+const AGENT_ORDER = AGENTS;
 
 export const Header = React.memo(function Header({
   workdir,

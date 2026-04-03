@@ -2,13 +2,18 @@ import crypto from 'node:crypto';
 
 import type { AgentName, AgentState, Message, Sender } from '../types.js';
 
-export const AGENTS: AgentName[] = ['claude', 'codex', 'kimi'];
+export const AGENTS: AgentName[] = ['claude', 'codex', 'kimi', 'copilot'];
 
 export const AGENT_LABELS: Record<AgentName, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
-  kimi: 'Kimi'
+  kimi: 'Kimi',
+  copilot: 'Copilot CLI'
 };
+
+export function createAgentRecord<T>(create: (agent: AgentName) => T): Record<AgentName, T> {
+  return Object.fromEntries(AGENTS.map((agent) => [agent, create(agent)])) as Record<AgentName, T>;
+}
 
 export function createId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID()}`;
