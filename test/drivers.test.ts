@@ -35,11 +35,29 @@ describe('driver argument builders', () => {
     const driver = new KimiDriver();
     expect(readBuildArgs(driver, { prompt: 'hello', runId: 'run-1', workdir: '/tmp' })).toEqual([
       '--print',
+      '--prompt',
       'hello',
       '--output-format',
       'stream-json',
       '--work-dir',
       '/tmp'
+    ]);
+  });
+
+  it('builds kimi resume args', () => {
+    const driver = new KimiDriver();
+    expect(
+      readBuildArgs(driver, { prompt: 'follow-up', runId: 'run-1', workdir: '/tmp', sessionId: 'sess' })
+    ).toEqual([
+      '--print',
+      '--prompt',
+      'follow-up',
+      '--output-format',
+      'stream-json',
+      '--work-dir',
+      '/tmp',
+      '--resume',
+      'sess'
     ]);
   });
 });

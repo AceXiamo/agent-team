@@ -362,22 +362,36 @@ Codex stderr 经常混入：
 #### 新建
 
 ```bash
-kimi --print "<prompt>" --output-format stream-json --work-dir <workdir>
+kimi --print --prompt "<prompt>" --output-format stream-json --work-dir <workdir>
 ```
 
 #### Resume
 
 ```bash
-kimi --print "<prompt>" --resume <sessionId> --output-format stream-json --work-dir <workdir>
+kimi --print --prompt "<prompt>" --output-format stream-json --work-dir <workdir> --resume <sessionId>
 ```
+
+### 已验证注意事项
+
+- Kimi 的 prompt 不能放在位置参数里，必须通过 `--prompt` 或 `-p` 传入
+- 如果把 prompt 直接跟在 `--print` 后面，Kimi 会把整段 prompt 当成子命令名，然后报 `No such command`
+- 当前 CLI 启动时会写 `~/.kimi/logs/kimi.log`，所以运行 `agent-team` 的宿主进程必须有家目录写权限
+- `--print` 模式会隐式启用 `--yolo`
 
 ### stdout JSONL
 
-Kimi 当前按 Claude 风格处理，主要对齐：
+Kimi 当前还没有像 Codex 那样完成 live 样本归档，解析先按 Claude 风格兼容，主要对齐：
 
 - `assistant`
 - `tool_result`
 - `result.session_id`
+
+后续建议补一份真实 fixture，至少覆盖：
+
+- 首条 session 标识事件
+- 正文文本事件
+- 工具调用与工具输出
+- 完成事件及 usage
 
 ### 统一映射
 

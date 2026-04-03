@@ -7,7 +7,7 @@ export class KimiDriver extends BaseJsonlDriver {
   protected readonly binary = 'kimi';
 
   protected buildArgs(opts: SendOptions): string[] {
-    const args = ['--print', opts.prompt, '--output-format', 'stream-json', '--work-dir', opts.workdir];
+    const args = ['--print', '--prompt', opts.prompt, '--output-format', 'stream-json', '--work-dir', opts.workdir];
     if (opts.sessionId) {
       args.push('--resume', opts.sessionId);
     }
