@@ -12,6 +12,7 @@ interface PendingTask {
   source: Sender;
   target: AgentName;
   prompt: string;
+  mode: 'user_request' | 'delegated_work' | 'review_handoff';
 }
 
 interface RouterOptions {
@@ -117,9 +118,14 @@ export class MessageRouter {
       return;
     }
 
-    const agentState = this.state.agents[parsed.target];
-    if (!agentState.available) {
-      this.appendSystemMessage(`${parsed.target} is unavailable on this machine.`, 'error');
+    if (parsed.type === 'toggle_agent') {
+      await this.setAgentEnabled(parsed.target, parsed.enabled);
+      return;
+    }
+
+    const dispatchError = this.getAgentDispatchError(parsed.target);
+    if (dispatchError) {
+      this.appendSystemMessage(dispatchError, 'error');
       return;
     }
 
@@ -137,7 +143,8 @@ export class MessageRouter {
       runId: createId('run'),
       source: 'human',
       target: parsed.target,
-      prompt: parsed.prompt
+      prompt: parsed.prompt,
+      mode: 'user_request'
     });
   }
 
@@ -150,6 +157,8 @@ export class MessageRouter {
 
     this.queues[agent] = [];
     state.queueLength = 0;
+    state.pendingReviewCount = 0;
+    state.activeMode = null;
     state.activeRunId = null;
     state.status = 'idle';
     state.lastError = null;
@@ -160,6 +169,37 @@ export class MessageRouter {
     }
 
     this.appendSystemMessage(`Reset ${agent} session for the current workspace session and cleared its pending queue.`, 'info');
+    this.emit();
+  }
+
+  async setAgentEnabled(agent: AgentName, enabled: boolean): Promise<void> {
+    const state = this.state.agents[agent];
+    if (state.enabled === enabled) {
+      this.appendSystemMessage(`${agent} is already ${enabled ? 'enabled' : 'disabled'} for this workspace.`, 'info');
+      return;
+    }
+
+    const queued = this.queues[agent].length;
+    if (!enabled) {
+      this.queues[agent] = [];
+      if (state.activeRunId) {
+        this.cancelledRuns.add(state.activeRunId);
+        await this.registry.get(agent).abort(state.activeRunId);
+      }
+    }
+
+    state.enabled = enabled;
+    this.syncAgentWorkState(agent);
+    await this.sessionStore.setAgentEnabled(this.workdirHash, agent, enabled);
+
+    if (enabled) {
+      this.appendSystemMessage(`Enabled ${agent} for this workspace.`, 'info');
+    } else {
+      const clearedLabel = queued > 0 ? ` and cleared ${queued} queued task${queued === 1 ? '' : 's'}` : '';
+      const activeLabel = state.activeRunId ? ' Aborted the active run.' : '';
+      this.appendSystemMessage(`Disabled ${agent} for this workspace${clearedLabel}.${activeLabel}`.trim(), 'info');
+    }
+
     this.emit();
   }
 
@@ -211,6 +251,8 @@ export class MessageRouter {
       const state = this.state.agents[agent];
       state.sessionId = activeSession?.agentSessions[agent] ?? null;
       state.available = availability.find((item) => item.name === agent)?.available ?? false;
+      state.enabled = workspaceSessions.agentEnabled[agent];
+      this.syncAgentWorkState(agent);
     }
 
     this.emit();
@@ -220,7 +262,7 @@ export class MessageRouter {
     const state = this.state.agents[task.target];
     if (state.status === 'running') {
       this.queues[task.target].push(task);
-      state.queueLength = this.queues[task.target].length;
+      this.syncAgentWorkState(task.target);
       this.emit();
       return;
     }
@@ -235,11 +277,13 @@ export class MessageRouter {
     const parser = new DelegationParser();
     const sessionKey = this.state.activeSessionId;
     let lastError: string | null = null;
+    let returnedControlToSource = false;
 
     agentState.status = 'running';
     agentState.activeRunId = task.runId;
+    agentState.activeMode = task.mode;
     agentState.lastError = null;
-    agentState.queueLength = this.queues[task.target].length;
+    this.syncAgentWorkState(task.target);
 
     this.appendMessage(message);
 
@@ -250,6 +294,7 @@ export class MessageRouter {
         prompt: buildAgentPrompt({
           target: task.target,
           source: task.source,
+          mode: task.mode,
           body: task.prompt,
           workdir: this.workdir
         }),
@@ -258,6 +303,9 @@ export class MessageRouter {
         switch (event.type) {
           case 'text': {
             const consumed = parser.consume(event.content);
+            if (task.mode === 'delegated_work' && consumed.requests.some((request) => request.target === task.source)) {
+              returnedControlToSource = true;
+            }
             this.applyDelegationResult(message.id, consumed.displayText, consumed.requests, consumed.errors, task.target);
             break;
           }
@@ -281,6 +329,9 @@ export class MessageRouter {
             });
             break;
           case 'delegate_request':
+            if (task.mode === 'delegated_work' && event.target === task.source) {
+              returnedControlToSource = true;
+            }
             this.handleDelegateRequest(task.target, event.target, event.message);
             break;
           case 'usage':
@@ -300,6 +351,9 @@ export class MessageRouter {
       }
 
       const finalChunk = parser.finalize();
+      if (task.mode === 'delegated_work' && finalChunk.requests.some((request) => request.target === task.source)) {
+        returnedControlToSource = true;
+      }
       this.applyDelegationResult(message.id, finalChunk.displayText, finalChunk.requests, finalChunk.errors, task.target);
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
@@ -307,10 +361,12 @@ export class MessageRouter {
     } finally {
       const wasCancelled = this.cancelledRuns.delete(task.runId);
       agentState.activeRunId = null;
+      agentState.activeMode = null;
       agentState.lastError = wasCancelled ? null : lastError;
       agentState.status = wasCancelled ? 'idle' : lastError ? 'error' : 'idle';
-      agentState.queueLength = this.queues[task.target].length;
+      this.syncAgentWorkState(task.target);
       this.updateMessageStatus(message.id, wasCancelled ? 'done' : lastError ? 'error' : 'done');
+      this.maybeQueueReviewHandoff(task, message.id, returnedControlToSource, wasCancelled);
       this.emit();
       void this.startNext(task.target);
     }
@@ -318,7 +374,7 @@ export class MessageRouter {
 
   private async startNext(agent: AgentName): Promise<void> {
     const next = this.queues[agent].shift();
-    this.state.agents[agent].queueLength = this.queues[agent].length;
+    this.syncAgentWorkState(agent);
     if (!next) {
       this.emit();
       return;
@@ -389,9 +445,9 @@ export class MessageRouter {
       content: [{ type: 'delegate', target, message: `${source} delegated: ${message}` }]
     });
 
-    const targetState = this.state.agents[target];
-    if (!targetState.available) {
-      this.appendSystemMessage(`Cannot delegate to ${target}: CLI unavailable.`, 'error');
+    const dispatchError = this.getAgentDispatchError(target);
+    if (dispatchError) {
+      this.appendSystemMessage(`Cannot delegate to ${target}: ${dispatchError}`, 'error');
       return;
     }
 
@@ -399,7 +455,39 @@ export class MessageRouter {
       runId: createId('run'),
       source,
       target,
-      prompt: `Message from ${source}: ${message}`
+      prompt: `Message from ${source}: ${message}`,
+      mode: 'delegated_work'
+    });
+  }
+
+  private maybeQueueReviewHandoff(
+    task: PendingTask,
+    messageId: string,
+    returnedControlToSource: boolean,
+    wasCancelled: boolean
+  ): void {
+    if (task.mode !== 'delegated_work' || wasCancelled || returnedControlToSource || !isAgentSender(task.source)) {
+      return;
+    }
+
+    const dispatchError = this.getAgentDispatchError(task.source);
+    if (dispatchError) {
+      this.appendSystemMessage(`Cannot return delegated result to ${task.source}: ${dispatchError}`, 'error');
+      return;
+    }
+
+    const handoffMessage = this.state.messages.find((item) => item.id === messageId);
+    if (!handoffMessage) {
+      return;
+    }
+
+    this.appendSystemMessage(`Queued ${task.target}'s delegated result back to ${task.source} for review.`, 'info');
+    this.enqueueTask({
+      runId: createId('run'),
+      source: task.target,
+      target: task.source,
+      mode: 'review_handoff',
+      prompt: buildReviewHandoffPrompt(task.target, handoffMessage)
     });
   }
 
@@ -447,6 +535,24 @@ export class MessageRouter {
     this.state.messages.push(message);
     this.schedulePersist();
     this.emit();
+  }
+
+  private getAgentDispatchError(agent: AgentName): string | null {
+    const state = this.state.agents[agent];
+    if (!state.enabled) {
+      return `${agent} is disabled for this workspace. Use \`/agent @${capitalizeAgent(agent)} on\` to re-enable it.`;
+    }
+    if (!state.available) {
+      return `${agent} is unavailable on this machine.`;
+    }
+    return null;
+  }
+
+  private syncAgentWorkState(agent: AgentName): void {
+    const state = this.state.agents[agent];
+    state.queueLength = this.queues[agent].length;
+    state.pendingReviewCount =
+      this.queues[agent].filter((task) => task.mode === 'review_handoff').length + (state.activeMode === 'review_handoff' ? 1 : 0);
   }
 
   private pushContent(messageId: string, content: MessageContent): void {
@@ -610,4 +716,102 @@ export class MessageRouter {
 
     return this.messageStore.load(this.workdirHash);
   }
+}
+
+function isAgentSender(sender: Sender): sender is AgentName {
+  return sender === 'claude' || sender === 'codex' || sender === 'kimi';
+}
+
+function buildReviewHandoffPrompt(source: AgentName, message: Message): string {
+  const lines = [
+    `Delegated work from ${source} has completed. Review it before answering the human user.`,
+    'If it is incomplete, delegate follow-up work or make the necessary fixes yourself.',
+    '',
+    'Returned work:',
+    serializeMessageForReview(message)
+  ];
+
+  return lines.join('\n');
+}
+
+function serializeMessageForReview(message: Message): string {
+  const blocks = message.content.map((content) => {
+    switch (content.type) {
+      case 'text':
+        return content.text.trim();
+      case 'thinking':
+        return `[thinking]\n${content.text.trim()}`;
+      case 'tool_use':
+        return `[tool ${content.tool}] ${summarizeValue(content.input)}`;
+      case 'tool_result':
+        return `[tool result ${content.tool}] ${summarizeText(content.output, 240)}`;
+      case 'delegate':
+        return `[delegated to ${content.target}] ${content.message}`;
+      case 'system':
+        return `[system ${content.tone ?? 'info'}] ${content.text}`;
+    }
+  });
+
+  const usage = formatUsage(message.usage);
+  if (usage) {
+    blocks.push(`[usage] ${usage}`);
+  }
+
+  return blocks.filter(Boolean).join('\n\n') || '[no output captured]';
+}
+
+function summarizeValue(value: unknown): string {
+  if (value == null) {
+    return 'none';
+  }
+
+  if (typeof value === 'string') {
+    return summarizeText(value, 120);
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `${value.length} item${value.length === 1 ? '' : 's'}`;
+  }
+
+  if (typeof value === 'object') {
+    return summarizeText(JSON.stringify(value), 120);
+  }
+
+  return String(value);
+}
+
+function summarizeText(value: string, limit: number): string {
+  const singleLine = value.replace(/\s+/g, ' ').trim();
+  if (!singleLine) {
+    return '';
+  }
+
+  return singleLine.length > limit ? `${singleLine.slice(0, limit - 3)}...` : singleLine;
+}
+
+function formatUsage(usage?: TokenUsage): string {
+  if (!usage) {
+    return '';
+  }
+
+  const parts: string[] = [];
+  if (usage.inputTokens != null) {
+    parts.push(`${usage.inputTokens} in`);
+  }
+  if (usage.outputTokens != null) {
+    parts.push(`${usage.outputTokens} out`);
+  }
+  if (usage.costUsd != null) {
+    parts.push(`$${usage.costUsd.toFixed(4)}`);
+  }
+
+  return parts.join(' • ');
+}
+
+function capitalizeAgent(agent: AgentName): string {
+  return `${agent.slice(0, 1).toUpperCase()}${agent.slice(1)}`;
 }

@@ -4,6 +4,7 @@ import { Box, useApp, useInput } from 'ink';
 import { extractMentionCandidates } from '../core/commandParser.js';
 import { senderLabel } from '../core/utils.js';
 import type { AgentName, AppState } from '../types.js';
+import { ContextPanel } from './ContextPanel.js';
 import { Header } from './Header.js';
 import { InputBox } from './InputBox.js';
 import { MessageStream } from './MessageStream.js';
@@ -72,6 +73,18 @@ export function App({ router }: AppProps): React.JSX.Element {
     [state.agents]
   );
 
+  const pendingReviewCount = useMemo(() =>
+    Object.values(state.agents).reduce((sum, agent) => sum + agent.pendingReviewCount, 0),
+    [state.agents]
+  );
+
+  const disabledAgents = useMemo(() =>
+    Object.values(state.agents)
+      .filter((agent) => !agent.enabled)
+      .map((agent) => senderLabel(agent.name)),
+    [state.agents]
+  );
+
   const selectedIndex = selectedMessageId
     ? state.messages.findIndex((m) => m.id === selectedMessageId)
     : -1;
@@ -79,6 +92,12 @@ export function App({ router }: AppProps): React.JSX.Element {
   useInput((value, key) => {
     if (key.ctrl && value === 'c') {
       void router.dispose().finally(exit);
+      return;
+    }
+
+    if (key.escape) {
+      setInput('');
+      setSelectedSuggestion(0);
       return;
     }
 
@@ -126,12 +145,15 @@ export function App({ router }: AppProps): React.JSX.Element {
         activeSessionTitle={state.activeSessionTitle}
         sessionCount={state.sessionCount}
       />
+      <ContextPanel messages={state.messages} selectedMessageId={selectedMessageId} />
       <MessageStream messages={state.messages} selectedMessageId={selectedMessageId} />
       <StatusBar
         messageCount={state.messages.length}
         selectedIndex={selectedIndex}
         runningAgents={runningAgents}
         queuedCount={queuedCount}
+        pendingReviewCount={pendingReviewCount}
+        disabledAgents={disabledAgents}
         submitting={submitting}
       />
       <InputBox

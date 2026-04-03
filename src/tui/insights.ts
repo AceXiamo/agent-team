@@ -124,7 +124,7 @@ export function describeDraft(input: string, agents: Record<AgentName, AgentStat
     case 'send': {
       const agent = agents[parsed.target];
       return {
-        state: agent.available ? 'ready' : 'error',
+        state: agent.available && agent.enabled ? 'ready' : 'error',
         title: `Enter sends to ${senderLabel(parsed.target)}`,
         detail: `${describeAgent(agent)} • ${parsed.prompt.length} chars • ${agent.sessionId ? 'resume session' : 'start fresh session'}`
       };
@@ -153,6 +153,14 @@ export function describeDraft(input: string, agents: Record<AgentName, AgentStat
         title: `Enter resets ${senderLabel(parsed.target)}`,
         detail: 'Clears the bound agent session for the current workspace session and drops its queue.'
       };
+    case 'toggle_agent':
+      return {
+        state: 'ready',
+        title: `Enter ${parsed.enabled ? 'enables' : 'disables'} ${senderLabel(parsed.target)}`,
+        detail: parsed.enabled
+          ? 'Re-enables that agent for direct requests, delegation, and review handoffs.'
+          : 'Stops new work from being sent there and prevents avoidable delegation errors.'
+      };
     case 'error':
       return {
         state: 'error',
@@ -163,8 +171,16 @@ export function describeDraft(input: string, agents: Record<AgentName, AgentStat
 }
 
 function describeAgent(agent: AgentState): string {
+  if (!agent.enabled) {
+    return 'agent disabled';
+  }
+
   if (!agent.available) {
     return 'agent unavailable';
+  }
+
+  if (agent.activeMode === 'review_handoff') {
+    return 'reviewing returned work';
   }
 
   if (agent.status === 'running') {

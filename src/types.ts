@@ -1,6 +1,7 @@
 export type AgentName = 'claude' | 'codex' | 'kimi';
 
 export type Sender = 'human' | 'system' | AgentName;
+export type CollaborationMode = 'user_request' | 'delegated_work' | 'review_handoff';
 
 export interface SendOptions {
   prompt: string;
@@ -92,7 +93,10 @@ export interface AgentState {
   sessionId: string | null;
   status: 'idle' | 'running' | 'error';
   available: boolean;
+  enabled: boolean;
   queueLength: number;
+  pendingReviewCount: number;
+  activeMode: CollaborationMode | null;
   activeRunId: string | null;
   lastError: string | null;
 }
@@ -130,5 +134,6 @@ export interface SessionInfo {
 
 export interface WorkspaceSessions {
   activeSessionId: string | null;
+  agentEnabled: Record<AgentName, boolean>;
   sessions: SessionInfo[];
 }

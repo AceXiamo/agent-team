@@ -30,6 +30,14 @@
 
 人只在开始和结束介入，中间过程 Agent 自治。
 
+### 默认协作心智
+
+- 你首先点名的 Agent 是本轮任务的主 Agent（owner）
+- 主 Agent 可以继续委派，但不能只做消息转发
+- 只要发生过委派，主 Agent 默认需要 review / synthesize 子 Agent 的结果
+- 子 Agent 的产出默认先回到主 Agent，由主 Agent 决定是否继续返工或向你汇报
+- 最终面向你的结果，默认应当由主 Agent 统一交付
+
 ---
 
 ## 核心设计理念

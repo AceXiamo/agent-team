@@ -11,8 +11,9 @@ interface MessageStreamProps {
 
 export function MessageStream({ messages, selectedMessageId }: MessageStreamProps): React.JSX.Element {
   const rows = process.stdout.rows ?? 24;
-  const visibleCount = Math.max(5, rows - 14);
+  const visibleCount = Math.max(5, rows - 18);
   const selectedIndex = selectedMessageId ? messages.findIndex((message) => message.id === selectedMessageId) : messages.length - 1;
+  const liveCount = messages.filter((message) => message.status === 'streaming').length;
 
   let start = Math.max(0, messages.length - visibleCount);
   if (selectedIndex !== -1) {
@@ -36,7 +37,7 @@ export function MessageStream({ messages, selectedMessageId }: MessageStreamProp
           Conversation
         </Text>
         <Text dimColor>
-          {messages.length} messages • {focusLabel}
+          {messages.length} messages • {focusLabel} • {liveCount > 0 ? `${liveCount} live` : 'idle'}
         </Text>
       </Box>
       {visibleMessages.length === 0 ? (

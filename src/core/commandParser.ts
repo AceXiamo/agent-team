@@ -5,6 +5,7 @@ import type { AgentName } from '../types.js';
 export type ParsedInput =
   | { type: 'send'; target: AgentName; prompt: string }
   | { type: 'reset'; target: AgentName }
+  | { type: 'toggle_agent'; target: AgentName; enabled: boolean }
   | { type: 'sessions' }
   | { type: 'new_session'; title?: string }
   | { type: 'switch_session'; sessionId: string }
@@ -21,6 +22,10 @@ export function parseUserInput(input: string): ParsedInput {
 
   if (trimmed.startsWith('/reset')) {
     return parseResetCommand(trimmed);
+  }
+
+  if (trimmed.startsWith('/agent') || trimmed.startsWith('/toggle')) {
+    return parseToggleAgentCommand(trimmed);
   }
 
   if (trimmed === '/sessions') {
@@ -70,6 +75,24 @@ function parseResetCommand(input: string): ParsedInput {
   }
 
   return { type: 'reset', target: agent };
+}
+
+function parseToggleAgentCommand(input: string): ParsedInput {
+  const match = input.match(/^\/(?:agent|toggle)\s+@([A-Za-z]+)\s+(on|off)\s*$/i);
+  if (!match) {
+    return { type: 'error', message: 'Usage: /agent @Claude on|off' };
+  }
+
+  const agent = match[1].toLowerCase();
+  if (!isAgentName(agent)) {
+    return { type: 'error', message: `Unknown target agent: @${match[1]}.` };
+  }
+
+  return {
+    type: 'toggle_agent',
+    target: agent,
+    enabled: match[2].toLowerCase() === 'on'
+  };
 }
 
 export function extractMentionCandidates(input: string): AgentName[] {

@@ -24,10 +24,12 @@ export function InputBox({
   agentStates
 }: InputBoxProps): React.JSX.Element {
   const targetInfo = targetAgent ? getTargetInfo(targetAgent, agentStates) : null;
+  const hint = targetInfo
+    ? `${targetInfo.label} is ${targetInfo.statusText}. Enter sends there.`
+    : 'Use /agent @Claude off|on to control which agents can receive new work.';
 
   return (
     <Box flexDirection="column" borderStyle="single" borderColor="yellow" paddingX={1}>
-      {/* Row 1: target + input + char count */}
       <Box justifyContent="space-between">
         <Box gap={1}>
           {targetInfo ? (
@@ -42,7 +44,6 @@ export function InputBox({
         <Text dimColor>{submitting ? '…' : `${input.length}`}</Text>
       </Box>
 
-      {/* Row 2: mention candidates (only when typing @) */}
       {suggestions.length > 0 ? (
         <Text dimColor>
           {suggestions.map((agent, index) =>
@@ -56,6 +57,7 @@ export function InputBox({
           }, [])}
         </Text>
       ) : null}
+      <Text dimColor>{hint}</Text>
     </Box>
   );
 }
@@ -64,10 +66,16 @@ function getTargetInfo(agent: AgentName, states: Record<AgentName, AgentState>):
   const state = states[agent];
   const label = shortLabel(agent);
 
+  if (!state?.enabled) return { label, color: 'yellow', statusText: 'disabled' };
   if (!state?.available) return { label, color: 'gray', statusText: 'offline' };
+  if (state.activeMode === 'review_handoff') return { label, color: 'magenta', statusText: 'reviewing' };
   if (state.status === 'running') return { label, color: 'green', statusText: 'busy' };
   if (state.status === 'error') return { label, color: 'red', statusText: 'error' };
-  return { label, color: 'cyan', statusText: 'ready' };
+  return {
+    label,
+    color: 'cyan',
+    statusText: state.pendingReviewCount > 0 ? `${state.pendingReviewCount} review queued` : 'ready'
+  };
 }
 
 function shortLabel(agent: AgentName): string {

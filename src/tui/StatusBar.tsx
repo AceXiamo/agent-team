@@ -6,6 +6,8 @@ interface StatusBarProps {
   selectedIndex: number; // -1 means tail
   runningAgents: string[];
   queuedCount: number;
+  pendingReviewCount: number;
+  disabledAgents: string[];
   submitting: boolean;
 }
 
@@ -14,6 +16,8 @@ export function StatusBar({
   selectedIndex,
   runningAgents,
   queuedCount,
+  pendingReviewCount,
+  disabledAgents,
   submitting
 }: StatusBarProps): React.JSX.Element {
   const isTail = selectedIndex === -1 || selectedIndex === messageCount - 1;
@@ -28,10 +32,11 @@ export function StatusBar({
     : 'idle';
 
   const queueLabel = queuedCount > 0 ? `${queuedCount} queued` : 'queue clear';
+  const reviewLabel = pendingReviewCount > 0 ? `${pendingReviewCount} review pending` : 'review clear';
+  const disabledLabel = disabledAgents.length > 0 ? `${disabledAgents.join(', ')} off` : 'all agents on';
 
   return (
     <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1}>
-      {/* Row 1: live state */}
       <Box gap={2}>
         <Text dimColor>
           <Text bold color="white">▶</Text>
@@ -43,6 +48,8 @@ export function StatusBar({
         </Text>
         <Text dimColor>│</Text>
         <Text dimColor>{queueLabel}</Text>
+        <Text dimColor>│</Text>
+        <Text dimColor>{reviewLabel}</Text>
         {submitting ? (
           <>
             <Text dimColor>│</Text>
@@ -51,9 +58,9 @@ export function StatusBar({
         ) : null}
       </Box>
 
-      {/* Row 2: keybindings */}
+      <Text dimColor>{disabledLabel}</Text>
       <Text dimColor>
-        ↑↓ focus  ⏎ toggle/send  Tab @mention  /new  /sessions  /switch  ^C quit
+        ↑↓ focus  Esc clear draft  ⏎ toggle/send  Tab @mention  /agent @Claude off|on  /new  /sessions  /switch  ^C quit
       </Text>
     </Box>
   );

@@ -18,21 +18,19 @@ const AGENT_ORDER: Array<'claude' | 'codex' | 'kimi'> = ['claude', 'codex', 'kim
 
 export function Header({ workdir, agents, activeSessionId, activeSessionTitle, sessionCount }: HeaderProps): React.JSX.Element {
   const entries = Object.values(agents);
-  const availableCount = entries.filter((agent) => agent.available).length;
+  const usableCount = entries.filter((agent) => agent.available && agent.enabled).length;
+  const reviewCount = entries.reduce((sum, agent) => sum + agent.pendingReviewCount, 0);
 
   return (
     <Box flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1}>
-      {/* Row 1: title + compact agent indicators + ready count */}
       <Box gap={1}>
         <Text bold color="cyan">agent-team</Text>
         <Text dimColor>│</Text>
-        {AGENT_ORDER.map((name) => (
-          <AgentDot key={name} agent={agents[name]} />
-        ))}
-        <Text dimColor>{availableCount}/{entries.length} ready</Text>
+        <Text dimColor>{usableCount}/{entries.length} enabled</Text>
+        <Text dimColor>│</Text>
+        <Text dimColor>{reviewCount > 0 ? `${reviewCount} review pending` : 'review clear'}</Text>
       </Box>
 
-      {/* Row 2: workspace + session */}
       <Box gap={2}>
         <Text>
           <Text color="gray">ws </Text>
@@ -46,19 +44,37 @@ export function Header({ workdir, agents, activeSessionId, activeSessionTitle, s
           <Text dimColor>{` • ${sessionCount}`}</Text>
         </Text>
       </Box>
+
+      <Box gap={1} flexWrap="wrap">
+        {AGENT_ORDER.map((name) => (
+          <AgentPill key={name} agent={agents[name]} />
+        ))}
+      </Box>
     </Box>
   );
 }
 
-function AgentDot({ agent }: { agent: AgentState }): React.JSX.Element {
+function AgentPill({ agent }: { agent: AgentState }): React.JSX.Element {
   const color = getAgentColor(agent);
   const dot = getStatusDot(agent);
-  const shortName = AGENT_LABELS[agent.name].split(' ')[0]; // "Claude" from "Claude Code"
+  const shortName = AGENT_LABELS[agent.name].split(' ')[0];
+  const stateLabel = !agent.enabled
+    ? 'off'
+    : !agent.available
+      ? 'missing'
+      : agent.activeMode === 'review_handoff'
+        ? 'review'
+        : agent.status === 'running'
+          ? 'busy'
+          : agent.pendingReviewCount > 0
+            ? `${agent.pendingReviewCount} review`
+            : 'ready';
 
   return (
-    <Text color={color}>
-      {dot}{shortName}
-    </Text>
+    <Box>
+      <Text color={color}>{`${dot}${shortName}`}</Text>
+      <Text dimColor>{` ${stateLabel}`}</Text>
+    </Box>
   );
 }
 
@@ -73,14 +89,18 @@ function shortId(value: string): string {
 }
 
 function getAgentColor(agent: AgentState): string {
+  if (!agent.enabled) return 'yellow';
   if (!agent.available) return 'gray';
+  if (agent.activeMode === 'review_handoff') return 'magenta';
   if (agent.status === 'running') return 'green';
   if (agent.status === 'error') return 'red';
   return 'cyan';
 }
 
 function getStatusDot(agent: AgentState): string {
+  if (!agent.enabled) return '×';
   if (!agent.available) return '○';
+  if (agent.activeMode === 'review_handoff') return '↺';
   if (agent.status === 'running') return '●';
   if (agent.status === 'error') return '▲';
   return '◦';

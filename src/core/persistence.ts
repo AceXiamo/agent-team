@@ -25,6 +25,16 @@ export class SessionStore {
     return normalizeWorkspaceSessions(data[workdirHash]);
   }
 
+  async setAgentEnabled(workdirHash: string, agent: AgentName, enabled: boolean): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const data = await readJson<Record<string, unknown>>(this.filePath, {});
+      const workspace = normalizeWorkspaceSessions(data[workdirHash]);
+      workspace.agentEnabled[agent] = enabled;
+      data[workdirHash] = workspace;
+      await writeJson(this.filePath, data);
+    });
+  }
+
   async createSession(workdirHash: string, title?: string): Promise<SessionInfo> {
     let created!: SessionInfo;
 
@@ -171,14 +181,16 @@ function deserializeMessage(message: PersistedMessage): Message {
 
 function normalizeWorkspaceSessions(value: unknown): WorkspaceSessions {
   if (isWorkspaceSessions(value)) {
+    const candidate = value as WorkspaceSessions & { agentEnabled?: unknown };
     return {
       activeSessionId: value.activeSessionId,
+      agentEnabled: normalizeAgentEnabled(candidate.agentEnabled),
       sessions: value.sessions.map(cloneSession)
     };
   }
 
   if (!value || typeof value !== 'object') {
-    return { activeSessionId: null, sessions: [] };
+    return { activeSessionId: null, agentEnabled: defaultAgentEnabled(), sessions: [] };
   }
 
   const migratedAgentSessions: Partial<Record<AgentName, string>> = {};
@@ -190,7 +202,7 @@ function normalizeWorkspaceSessions(value: unknown): WorkspaceSessions {
   }
 
   if (Object.keys(migratedAgentSessions).length === 0) {
-    return { activeSessionId: null, sessions: [] };
+    return { activeSessionId: null, agentEnabled: defaultAgentEnabled(), sessions: [] };
   }
 
   const now = new Date().toISOString();
@@ -204,6 +216,7 @@ function normalizeWorkspaceSessions(value: unknown): WorkspaceSessions {
 
   return {
     activeSessionId: session.id,
+    agentEnabled: defaultAgentEnabled(),
     sessions: [session]
   };
 }
@@ -223,6 +236,28 @@ function cloneSession(session: SessionInfo): SessionInfo {
   return {
     ...session,
     agentSessions: { ...session.agentSessions }
+  };
+}
+
+function defaultAgentEnabled(): Record<AgentName, boolean> {
+  return {
+    claude: true,
+    codex: true,
+    kimi: true
+  };
+}
+
+function normalizeAgentEnabled(value: unknown): Record<AgentName, boolean> {
+  const defaults = defaultAgentEnabled();
+  if (!value || typeof value !== 'object') {
+    return defaults;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return {
+    claude: typeof candidate.claude === 'boolean' ? candidate.claude : defaults.claude,
+    codex: typeof candidate.codex === 'boolean' ? candidate.codex : defaults.codex,
+    kimi: typeof candidate.kimi === 'boolean' ? candidate.kimi : defaults.kimi
   };
 }
 

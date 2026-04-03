@@ -17,10 +17,47 @@ afterEach(async () => {
 });
 
 describe('MessageRouter', () => {
+  it('automatically returns delegated work to the owner for review', async () => {
+    const { router } = await createRouter({
+      codex: [
+        { type: 'text', content: 'Delegating\n```agent-team\n{"action":"delegate","target":"claude","message":"implement the requested slice"}\n```' },
+        { type: 'done', sessionId: 'codex-owner-session' }
+      ],
+      codexExtra: [
+        { type: 'text', content: 'I reviewed Claude output and prepared the final response.' },
+        { type: 'done', sessionId: 'codex-owner-session' }
+      ],
+      claude: [
+        { type: 'text', content: 'Implemented the requested slice and validated the happy path.' },
+        { type: 'done', sessionId: 'claude-session' }
+      ]
+    });
+
+    await router.handleInput('@Codex build the feature');
+    await waitForIdle(router);
+
+    const state = router.getState();
+    expect(state.messages.filter((message) => message.sender === 'codex')).toHaveLength(2);
+    expect(state.messages.filter((message) => message.sender === 'claude')).toHaveLength(1);
+    expect(
+      state.messages.some((message) =>
+        message.content.some(
+          (content) => content.type === 'system' && content.text.includes("Queued claude's delegated result back to codex for review.")
+        )
+      )
+    ).toBe(true);
+
+    await router.dispose();
+  });
+
   it('routes human -> codex -> claude delegation and persists session ids', async () => {
     const { router, baseDir } = await createRouter({
       codex: [
         { type: 'text', content: 'Working\n```agent-team\n{"action":"delegate","target":"claude","message":"please review"}\n```' },
+        { type: 'done', sessionId: 'codex-session' }
+      ],
+      codexExtra: [
+        { type: 'text', content: 'I reviewed Claude output and wrapped up the task.' },
         { type: 'done', sessionId: 'codex-session' }
       ],
       claude: [
@@ -45,6 +82,68 @@ describe('MessageRouter', () => {
       codex: 'codex-session',
       claude: 'claude-session'
     });
+
+    await router.dispose();
+  });
+
+  it('does not auto-return delegated work when the worker already delegated back explicitly', async () => {
+    const { router } = await createRouter({
+      codex: [
+        { type: 'text', content: 'Need Claude to inspect\n```agent-team\n{"action":"delegate","target":"claude","message":"inspect the patch"}\n```' },
+        { type: 'done', sessionId: 'codex-session' }
+      ],
+      codexExtra: [
+        { type: 'text', content: 'I reviewed the explicit handoff from Claude.' },
+        { type: 'done', sessionId: 'codex-session' }
+      ],
+      claude: [
+        {
+          type: 'text',
+          content:
+            'Inspection complete.\n```agent-team\n{"action":"delegate","target":"codex","message":"review my findings and decide next steps"}\n```'
+        },
+        { type: 'done', sessionId: 'claude-session' }
+      ]
+    });
+
+    await router.handleInput('@Codex inspect this');
+    await waitForIdle(router);
+
+    const state = router.getState();
+    expect(state.messages.filter((message) => message.sender === 'codex')).toHaveLength(2);
+    expect(
+      state.messages.some((message) =>
+        message.content.some(
+          (content) => content.type === 'system' && content.text.includes("Queued claude's delegated result back to codex for review.")
+        )
+      )
+    ).toBe(false);
+
+    await router.dispose();
+  });
+
+  it('does not dispatch work to agents disabled for the workspace', async () => {
+    const { router } = await createRouter({
+      codex: [
+        { type: 'text', content: 'Trying Claude\n```agent-team\n{"action":"delegate","target":"claude","message":"review this"}\n```' },
+        { type: 'done', sessionId: 'codex-session' }
+      ]
+    });
+
+    await router.handleInput('/agent @Claude off');
+    await router.handleInput('@Codex inspect this');
+    await waitForIdle(router);
+
+    const state = router.getState();
+    expect(state.agents.claude.enabled).toBe(false);
+    expect(state.messages.some((message) => message.sender === 'claude')).toBe(false);
+    expect(
+      state.messages.some((message) =>
+        message.content.some(
+          (content) => content.type === 'system' && content.text.includes('Cannot delegate to claude: claude is disabled for this workspace.')
+        )
+      )
+    ).toBe(true);
 
     await router.dispose();
   });

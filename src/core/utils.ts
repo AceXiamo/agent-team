@@ -24,7 +24,10 @@ export function createEmptyAgentState(name: AgentName): AgentState {
     sessionId: null,
     status: 'idle',
     available: false,
+    enabled: true,
     queueLength: 0,
+    pendingReviewCount: 0,
+    activeMode: null,
     activeRunId: null,
     lastError: null
   };

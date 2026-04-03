@@ -31,6 +31,7 @@ describe('persistence', () => {
 
     let sessions = await store.loadWorkspaceSessions('hash-1');
     expect(sessions.activeSessionId).toBe(second.id);
+    expect(sessions.agentEnabled).toEqual({ claude: true, codex: true, kimi: true });
     expect(sessions.sessions).toHaveLength(2);
 
     await store.switchSession('hash-1', first.id);
@@ -64,10 +65,23 @@ describe('persistence', () => {
     const store = new SessionStore(baseDir);
     const sessions = await store.loadWorkspaceSessions('hash-1');
     expect(sessions.activeSessionId).toBe('session_migrated');
+    expect(sessions.agentEnabled).toEqual({ claude: true, codex: true, kimi: true });
     expect(sessions.sessions[0]?.agentSessions).toEqual({
       claude: 'legacy-claude',
       codex: 'legacy-codex'
     });
+  });
+
+  it('persists agent enablement per workspace', async () => {
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-team-'));
+    tempDirs.push(baseDir);
+    const store = new SessionStore(baseDir);
+
+    await store.createSession('hash-1', 'Controls');
+    await store.setAgentEnabled('hash-1', 'claude', false);
+
+    const sessions = await store.loadWorkspaceSessions('hash-1');
+    expect(sessions.agentEnabled).toEqual({ claude: false, codex: true, kimi: true });
   });
 
   it('persists messages as session-scoped jsonl', async () => {

@@ -31,6 +31,14 @@ describe('parseUserInput', () => {
     });
   });
 
+  it('parses agent toggle command', () => {
+    expect(parseUserInput('/agent @Claude off')).toEqual({
+      type: 'toggle_agent',
+      target: 'claude',
+      enabled: false
+    });
+  });
+
   it('parses new session command with title', () => {
     expect(parseUserInput('/new review flow')).toEqual({
       type: 'new_session',
