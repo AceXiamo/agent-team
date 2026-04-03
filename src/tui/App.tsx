@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, useApp, useInput } from 'ink';
 
 import { extractMentionCandidates } from '../core/commandParser.js';
+import { senderLabel } from '../core/utils.js';
 import type { AgentName, AppState } from '../types.js';
 import { Header } from './Header.js';
 import { InputBox } from './InputBox.js';
 import { MessageStream } from './MessageStream.js';
+import { StatusBar } from './StatusBar.js';
 import { MessageRouter } from '../core/router.js';
 
 interface AppProps {
@@ -45,6 +47,34 @@ export function App({ router }: AppProps): React.JSX.Element {
       setSelectedSuggestion(0);
     }
   }, [selectedSuggestion, suggestions.length]);
+
+  // Derive the target agent from input (last @mention) for display
+  const targetAgent = useMemo<AgentName | null>(() => {
+    if (suggestions.length > 0) return activeSuggestion;
+    const match = input.match(/@(\w+)/);
+    if (match) {
+      const name = match[1].toLowerCase();
+      if (name in state.agents) return name as AgentName;
+    }
+    return null;
+  }, [input, suggestions, activeSuggestion, state.agents]);
+
+  // Derive running agents for StatusBar
+  const runningAgents = useMemo(() =>
+    Object.values(state.agents)
+      .filter((a) => a.status === 'running')
+      .map((a) => senderLabel(a.name)),
+    [state.agents]
+  );
+
+  const queuedCount = useMemo(() =>
+    Object.values(state.agents).reduce((sum, a) => sum + a.queueLength, 0),
+    [state.agents]
+  );
+
+  const selectedIndex = selectedMessageId
+    ? state.messages.findIndex((m) => m.id === selectedMessageId)
+    : -1;
 
   useInput((value, key) => {
     if (key.ctrl && value === 'c') {
@@ -97,12 +127,21 @@ export function App({ router }: AppProps): React.JSX.Element {
         sessionCount={state.sessionCount}
       />
       <MessageStream messages={state.messages} selectedMessageId={selectedMessageId} />
+      <StatusBar
+        messageCount={state.messages.length}
+        selectedIndex={selectedIndex}
+        runningAgents={runningAgents}
+        queuedCount={queuedCount}
+        submitting={submitting}
+      />
       <InputBox
         input={input}
         suggestions={suggestions}
         selectedSuggestion={selectedSuggestion}
         activeSuggestion={activeSuggestion}
         submitting={submitting}
+        targetAgent={targetAgent}
+        agentStates={state.agents}
       />
     </Box>
   );

@@ -8,7 +8,7 @@ import { DriverRegistry } from '../src/core/registry.js';
 import { MessageRouter } from '../src/core/router.js';
 import { MessageLogStore, SessionStore } from '../src/core/persistence.js';
 import { hashWorkdir } from '../src/core/utils.js';
-import type { AgentDriver, AgentEvent, AgentName, SendOptions } from '../src/types.js';
+import type { AgentDriver, AgentEvent, AgentName, AppState, SendOptions } from '../src/types.js';
 
 const tempDirs: string[] = [];
 
@@ -133,6 +133,130 @@ describe('MessageRouter', () => {
   });
 });
 
+describe('MessageRouter - emit throttling', () => {
+  it('throttles high-frequency pushContent: emits fewer times than push calls', async () => {
+    const chunks = 20;
+    const events: AgentEvent[] = [];
+    for (let i = 0; i < chunks; i++) {
+      events.push({ type: 'text', content: `chunk-${i} ` });
+    }
+    events.push({ type: 'done', sessionId: 'throttle-session' });
+
+    const { router } = await createRouter({ codex: events });
+
+    let emitCount = 0;
+    const states: AppState[] = [];
+    router.subscribe((state) => {
+      emitCount++;
+      states.push(state);
+    });
+
+    await router.handleInput('@Codex stream me');
+    await waitForIdle(router);
+
+    // The initial subscribe snapshot is 1 emit, plus the task completion emit.
+    // The 20 text chunks should be coalesced by scheduleEmit (50ms window).
+    // Total emits should be well under chunks + initial + completion.
+    expect(emitCount).toBeLessThan(chunks);
+
+    // Verify final state is correct: all chunks merged
+    const agentMsg = router.getState().messages.find((m) => m.sender === 'codex');
+    expect(agentMsg).toBeDefined();
+    expect(agentMsg!.content.length).toBeGreaterThan(0);
+    const fullText = agentMsg!.content.filter((c) => c.type === 'text').map((c) => (c as { text: string }).text).join('');
+    for (let i = 0; i < chunks; i++) {
+      expect(fullText).toContain(`chunk-${i}`);
+    }
+
+    await router.dispose();
+  });
+
+  it('continuous mergeUsage does not lose state', async () => {
+    const usageCount = 15;
+    const events: AgentEvent[] = [];
+    for (let i = 0; i < usageCount; i++) {
+      events.push({ type: 'usage', usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.0001 } });
+    }
+    events.push({ type: 'done', sessionId: 'usage-session' });
+
+    const { router } = await createRouter({ codex: events });
+
+    await router.handleInput('@Codex count tokens');
+    await waitForIdle(router);
+
+    const agentMsg = router.getState().messages.find((m) => m.sender === 'codex');
+    expect(agentMsg).toBeDefined();
+    expect(agentMsg!.usage).toBeDefined();
+    expect(agentMsg!.usage!.inputTokens).toBe(10 * usageCount);
+    expect(agentMsg!.usage!.outputTokens).toBe(5 * usageCount);
+    expect(agentMsg!.usage!.costUsd).toBeCloseTo(0.0001 * usageCount);
+
+    await router.dispose();
+  });
+
+  it('snapshot is a shallow copy — mutating returned state does not affect router', async () => {
+    const { router } = await createRouter({
+      codex: [
+        { type: 'text', content: 'hello' },
+        { type: 'done', sessionId: 'snap-session' }
+      ]
+    });
+
+    await router.handleInput('@Codex test');
+    await waitForIdle(router);
+
+    const snap1 = router.getState();
+    const originalLength = snap1.messages.length;
+
+    // Mutate the snapshot — should not affect the router
+    snap1.messages.push({
+      id: 'fake',
+      sender: 'human',
+      timestamp: new Date(),
+      status: 'done',
+      content: [{ type: 'text', text: 'injected' }]
+    });
+
+    const snap2 = router.getState();
+    expect(snap2.messages.length).toBe(originalLength);
+
+    await router.dispose();
+  });
+
+  it('immediate emit for structural events (session switch) still works', async () => {
+    const { router } = await createRouter({
+      codex: [
+        { type: 'text', content: 'first session reply' },
+        { type: 'done', sessionId: 'codex-session-1' }
+      ],
+      codexExtra: [
+        { type: 'text', content: 'second session reply' },
+        { type: 'done', sessionId: 'codex-session-2' }
+      ]
+    });
+
+    await router.handleInput('@Codex first thread');
+    await waitForIdle(router);
+    const firstSessionId = router.getState().activeSessionId!;
+
+    await router.handleInput('/new Test session');
+    const secondSessionId = router.getState().activeSessionId!;
+    expect(secondSessionId).not.toBe(firstSessionId);
+
+    await router.handleInput('@Codex second thread');
+    await waitForIdle(router);
+
+    // Switch back to first session — should reflect immediately (not throttled)
+    await router.handleInput(`/switch ${firstSessionId}`);
+    const state = router.getState();
+    expect(state.activeSessionId).toBe(firstSessionId);
+    expect(state.messages.some((m) => m.content.some((c) => c.type === 'text' && (c as { text: string }).text.includes('first session reply')))).toBe(true);
+    expect(state.messages.some((m) => m.content.some((c) => c.type === 'text' && (c as { text: string }).text.includes('second session reply')))).toBe(false);
+
+    await router.dispose();
+  });
+});
+
 class MockDriver implements AgentDriver {
   readonly displayName: string;
   private readonly runs: AgentEvent[][];
@@ -192,9 +316,12 @@ async function createRouter(scenarios: {
 }
 
 async function waitForIdle(router: MessageRouter): Promise<void> {
-  for (let index = 0; index < 40; index += 1) {
+  // With throttled emits, we need a slightly longer wait
+  for (let index = 0; index < 80; index += 1) {
     const state = router.getState();
     if (Object.values(state.agents).every((agent) => agent.status !== 'running' && agent.queueLength === 0)) {
+      // Extra wait to flush any pending scheduleEmit
+      await new Promise((resolve) => setTimeout(resolve, 60));
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 10));

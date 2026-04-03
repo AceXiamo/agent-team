@@ -4,7 +4,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 
 import type { AgentState } from '../types.js';
-import { senderLabel } from '../core/utils.js';
+import { AGENT_LABELS } from '../core/utils.js';
 
 interface HeaderProps {
   workdir: string;
@@ -14,71 +14,51 @@ interface HeaderProps {
   sessionCount: number;
 }
 
+const AGENT_ORDER: Array<'claude' | 'codex' | 'kimi'> = ['claude', 'codex', 'kimi'];
+
 export function Header({ workdir, agents, activeSessionId, activeSessionTitle, sessionCount }: HeaderProps): React.JSX.Element {
   const entries = Object.values(agents);
-  const runningCount = entries.filter((agent) => agent.status === 'running').length;
-  const queuedCount = entries.reduce((sum, agent) => sum + agent.queueLength, 0);
   const availableCount = entries.filter((agent) => agent.available).length;
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
-      <Box justifyContent="space-between">
-        <Text bold color="cyan">
-          agent-team
-        </Text>
-        <Text dimColor>
-          {availableCount}/{entries.length} agents ready
-        </Text>
-      </Box>
-      <Text>
-        <Text color="gray">workspace </Text>
-        <Text bold>{formatWorkdir(workdir)}</Text>
-        <Text dimColor>{`  (${workdir})`}</Text>
-      </Text>
-      <Text>
-        <Text color="gray">session </Text>
-        <Text bold>{activeSessionTitle ?? 'none selected'}</Text>
-        <Text dimColor>
-          {activeSessionId ? `  (${shortId(activeSessionId)})` : '  use /new to start'}
-        </Text>
-        <Text dimColor>{`  • ${sessionCount} total`}</Text>
-      </Text>
-      <Box gap={2} flexWrap="wrap">
-        {entries.map((agent) => (
-          <AgentChip key={agent.name} agent={agent} />
+    <Box flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1}>
+      {/* Row 1: title + compact agent indicators + ready count */}
+      <Box gap={1}>
+        <Text bold color="cyan">agent-team</Text>
+        <Text dimColor>│</Text>
+        {AGENT_ORDER.map((name) => (
+          <AgentDot key={name} agent={agents[name]} />
         ))}
+        <Text dimColor>{availableCount}/{entries.length} ready</Text>
       </Box>
-      <Text dimColor>
-        {`${runningCount > 0 ? `${runningCount} running` : 'idle'} • ${queuedCount > 0 ? `${queuedCount} queued` : 'queue clear'} • /sessions • /new • /switch <id> • Tab mention • ↑↓ focus • Enter send/toggle`}
-      </Text>
+
+      {/* Row 2: workspace + session */}
+      <Box gap={2}>
+        <Text>
+          <Text color="gray">ws </Text>
+          <Text bold>{formatWorkdir(workdir)}</Text>
+        </Text>
+        <Text dimColor>│</Text>
+        <Text>
+          <Text color="gray">ses </Text>
+          <Text bold>{activeSessionTitle ?? '—'}</Text>
+          {activeSessionId ? <Text dimColor>{` (${shortId(activeSessionId)})`}</Text> : null}
+          <Text dimColor>{` • ${sessionCount}`}</Text>
+        </Text>
+      </Box>
     </Box>
   );
 }
 
-function AgentChip({ agent }: { agent: AgentState }): React.JSX.Element {
+function AgentDot({ agent }: { agent: AgentState }): React.JSX.Element {
   const color = getAgentColor(agent);
-  const status = !agent.available
-    ? 'offline'
-    : agent.status === 'running'
-      ? 'working'
-      : agent.status === 'error'
-        ? 'error'
-        : 'ready';
-  const detail = !agent.available
-    ? 'cli missing'
-    : agent.queueLength > 0
-      ? `queue ${agent.queueLength}`
-      : agent.sessionId
-        ? `driver ${shortId(agent.sessionId)}`
-        : 'new driver session';
+  const dot = getStatusDot(agent);
+  const shortName = AGENT_LABELS[agent.name].split(' ')[0]; // "Claude" from "Claude Code"
 
   return (
-    <Box>
-      <Text color={color}>
-        {getStatusDot(agent)} {senderLabel(agent.name)}
-      </Text>
-      <Text dimColor>{` ${status} • ${detail}`}</Text>
-    </Box>
+    <Text color={color}>
+      {dot}{shortName}
+    </Text>
   );
 }
 
@@ -89,31 +69,19 @@ function formatWorkdir(workdir: string): string {
 }
 
 function shortId(value: string): string {
-  return value.length > 12 ? `${value.slice(0, 8)}...` : value;
+  return value.length > 12 ? `${value.slice(0, 8)}…` : value;
 }
 
 function getAgentColor(agent: AgentState): string {
-  if (!agent.available) {
-    return 'gray';
-  }
-  if (agent.status === 'running') {
-    return 'green';
-  }
-  if (agent.status === 'error') {
-    return 'red';
-  }
+  if (!agent.available) return 'gray';
+  if (agent.status === 'running') return 'green';
+  if (agent.status === 'error') return 'red';
   return 'cyan';
 }
 
 function getStatusDot(agent: AgentState): string {
-  if (!agent.available) {
-    return '○';
-  }
-  if (agent.status === 'running') {
-    return '●';
-  }
-  if (agent.status === 'error') {
-    return '▲';
-  }
+  if (!agent.available) return '○';
+  if (agent.status === 'running') return '●';
+  if (agent.status === 'error') return '▲';
   return '◦';
 }

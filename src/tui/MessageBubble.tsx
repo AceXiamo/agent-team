@@ -1,29 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Box, Text } from 'ink';
 
 import type { Message, MessageContent, TokenUsage } from '../types.js';
 import { formatTimestamp, senderLabel } from '../core/utils.js';
 import { MarkdownText } from './MarkdownText.js';
-
-const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-
-function useSpinner(active: boolean): string {
-  const [frame, setFrame] = useState(0);
-
-  useEffect(() => {
-    if (!active) {
-      return;
-    }
-
-    const timer = setInterval(() => {
-      setFrame((prev) => (prev + 1) % SPINNER_FRAMES.length);
-    }, 80);
-
-    return () => clearInterval(timer);
-  }, [active]);
-
-  return active ? SPINNER_FRAMES[frame]! : '';
-}
 
 function formatUsage(usage: TokenUsage): string {
   const parts: string[] = [];
@@ -40,9 +20,8 @@ interface MessageBubbleProps {
 }
 
 export function MessageBubble({ message, selected }: MessageBubbleProps): React.JSX.Element {
-  const isStreaming = message.status === 'streaming';
-  const spinner = useSpinner(isStreaming);
   const accent = getAccentColor(message);
+  const isStreaming = message.status === 'streaming';
   const usageText = !isStreaming && message.usage ? formatUsage(message.usage) : '';
 
   return (
@@ -58,7 +37,7 @@ export function MessageBubble({ message, selected }: MessageBubbleProps): React.
           {selected ? '▶' : '•'} {senderLabel(message.sender)}
         </Text>
         <Text dimColor>
-          {formatTimestamp(message.timestamp)} {renderStatusLabel(message, spinner)}
+          {formatTimestamp(message.timestamp)} {renderStatusLabel(message)}
         </Text>
       </Box>
       <Box flexDirection="column" marginLeft={2}>
@@ -151,9 +130,9 @@ function ToolBlock({
   );
 }
 
-function renderStatusLabel(message: Message, spinner: string): string {
+function renderStatusLabel(message: Message): string {
   if (message.status === 'streaming') {
-    return `${spinner} live`;
+    return 'live';
   }
 
   if (message.status === 'error') {

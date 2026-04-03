@@ -47,6 +47,10 @@ export class MessageRouter {
   private pendingPersist: PersistSnapshot | null = null;
   private state: AppState;
 
+  private emitTimer: ReturnType<typeof setTimeout> | null = null;
+  private emitQueued = false;
+  private static readonly EMIT_DELAY_MS = 50;
+
   private constructor(options: RouterOptions) {
     this.workdir = options.workdir;
     this.workdirHash = hashWorkdir(options.workdir);
@@ -461,7 +465,7 @@ export class MessageRouter {
     }
 
     this.schedulePersist();
-    this.emit();
+    this.scheduleEmit();
   }
 
   private updateMessageStatus(messageId: string, status: Message['status']): void {
@@ -488,18 +492,56 @@ export class MessageRouter {
     };
 
     this.schedulePersist();
-    this.emit();
+    this.scheduleEmit();
   }
 
+  /**
+   * Immediate emit — used for low-frequency structural events
+   * (session switch, reset, task start/finish, initial load).
+   * Cancels any pending scheduled emit to avoid double-firing.
+   */
   private emit(): void {
+    if (this.emitTimer) {
+      clearTimeout(this.emitTimer);
+      this.emitTimer = null;
+      this.emitQueued = false;
+    }
     const snapshot = this.snapshot();
     for (const listener of this.listeners) {
       listener(snapshot);
     }
   }
 
+  /**
+   * Throttled emit — used for high-frequency streaming updates
+   * (pushContent, mergeUsage). Multiple calls within the window
+   * are coalesced into a single emit.
+   */
+  private scheduleEmit(): void {
+    if (this.emitQueued) {
+      return;
+    }
+    this.emitQueued = true;
+    this.emitTimer = setTimeout(() => {
+      this.emitQueued = false;
+      this.emitTimer = null;
+      const snapshot = this.snapshot();
+      for (const listener of this.listeners) {
+        listener(snapshot);
+      }
+    }, MessageRouter.EMIT_DELAY_MS);
+  }
+
   private snapshot(): AppState {
-    return structuredClone(this.state);
+    return {
+      ...this.state,
+      messages: [...this.state.messages],
+      agents: {
+        claude: { ...this.state.agents.claude },
+        codex: { ...this.state.agents.codex },
+        kimi: { ...this.state.agents.kimi }
+      }
+    };
   }
 
   private schedulePersist(): void {
