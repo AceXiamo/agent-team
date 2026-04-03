@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Text, useApp, useInput } from 'ink';
+import { Box, useApp, useInput } from 'ink';
 
 import { extractMentionCandidates } from '../core/commandParser.js';
 import type { AgentName, AppState } from '../types.js';
@@ -38,6 +38,7 @@ export function App({ router }: AppProps): React.JSX.Element {
   }, [selectedMessageId, state.messages]);
 
   const suggestions = useMemo(() => extractMentionCandidates(input), [input]);
+  const activeSuggestion = suggestions[selectedSuggestion] ?? suggestions[0] ?? null;
 
   useEffect(() => {
     if (selectedSuggestion >= suggestions.length) {
@@ -90,8 +91,13 @@ export function App({ router }: AppProps): React.JSX.Element {
     <Box flexDirection="column">
       <Header workdir={state.workdir} agents={state.agents} />
       <MessageStream messages={state.messages} selectedMessageId={selectedMessageId} />
-      <InputBox input={input} suggestions={suggestions} selectedSuggestion={selectedSuggestion} />
-      {submitting ? <Text dimColor>Sending...</Text> : null}
+      <InputBox
+        input={input}
+        suggestions={suggestions}
+        selectedSuggestion={selectedSuggestion}
+        activeSuggestion={activeSuggestion}
+        submitting={submitting}
+      />
     </Box>
   );
 

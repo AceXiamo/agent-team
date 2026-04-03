@@ -61,7 +61,7 @@ export class DelegationParser {
       if (request) {
         requests.push(request);
       } else {
-        errors.push('Ignored invalid delegate request block.');
+        displayText += this.buffer.slice(0, endIndex + BLOCK_END.length);
       }
 
       this.buffer = this.buffer.slice(endIndex + BLOCK_END.length);

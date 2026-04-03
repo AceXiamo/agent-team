@@ -176,6 +176,12 @@ codex exec resume <sessionId> "<prompt>" \
 
 当前版本 Codex 的 stdout 不是单一协议，而是混合事件流。已观察到的关键事件如下。
 
+当前仓库里可直接对照的实现和样本：
+
+- driver 解析逻辑：`src/drivers/codex.ts`
+- live fixture：`test/fixtures/codex-live-sample.jsonl`
+- 解析测试：`test/codex-fixture.test.ts`、`test/drivers.test.ts`
+
 #### 最小成功样本
 
 ```json
@@ -255,6 +261,42 @@ Codex 当前不一定总是输出单独的 `done.session_id`。
 | `event_msg.payload.type === "agent_reasoning"` | `thinking` |
 | `done.session_id` | `done(sessionId)` |
 | `thread.started.thread_id` | `done(sessionId)` 的 session fallback |
+
+### 当前 driver 已显式处理的顶层 `type`
+
+下面这张表更接近“代码真实覆盖面”，方便后续补全时直接对照 `src/drivers/codex.ts`。
+
+| 顶层 `type` | 当前处理方式 |
+|---|---|
+| `done` | 读取 `session_id/sessionId`，映射为 `done` |
+| `thread.started` | 读取 `thread_id`，作为 session fallback 映射为 `done` |
+| `item.completed` | 继续看 `item.type`，映射正文 / thinking / tool 事件 |
+| `response_item` | 继续看 `payload.type`，映射正文 / tool 事件 |
+| `event_msg` | 继续看 `payload.type`，映射 `agent_message` / `agent_reasoning` / `task_complete` |
+| `turn.completed` | 提取 `usage`，映射为 `usage` |
+| `turn.started` | 当前忽略 |
+| `turn_context` | 当前忽略 |
+
+### 当前已显式处理的子类型
+
+| 容器 | 子类型 | 映射 |
+|---|---|---|
+| `item.completed.item.type` | `agent_message` | `text` |
+| `item.completed.item.type` | `reasoning` | `thinking` |
+| `item.completed.item.type` | `function_call` | `tool_use` |
+| `item.completed.item.type` | `function_call_output` | `tool_result` |
+| `response_item.payload.type` | `message` + `role=assistant` | `text` |
+| `response_item.payload.type` | `function_call` | `tool_use` |
+| `response_item.payload.type` | `function_call_output` | `tool_result` |
+| `event_msg.payload.type` | `agent_message` | `text` |
+| `event_msg.payload.type` | `agent_reasoning` | `thinking` |
+| `event_msg.payload.type` | `task_complete` | 取 `last_agent_message` 映射 `text` |
+
+补全策略建议：
+
+- 先把真实 stdout 样本追加到 fixture，再补 `CodexDriver.mapLine()`。
+- 新类型优先在 `test/drivers.test.ts` 或 fixture 测试里锁定，再改 driver。
+- 不要在 router / TUI 层猜协议，Codex 差异统一收口到 driver。
 
 ### `turn.completed.usage` 的产品价值
 

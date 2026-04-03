@@ -25,14 +25,44 @@ export function MarkdownText({ text }: MarkdownTextProps): React.JSX.Element {
           );
         }
 
-        return (
-          <Text key={index}>
-            {renderInline(block.line)}
-          </Text>
-        );
+        return <LineBlock key={index} line={block.line} />;
       })}
     </Box>
   );
+}
+
+function LineBlock({ line }: { line: string }): React.JSX.Element {
+  if (!line.trim()) {
+    return <Text> </Text>;
+  }
+
+  if (line.startsWith('#')) {
+    const level = line.match(/^#+/)?.[0].length ?? 1;
+    return (
+      <Text bold color={level === 1 ? 'cyan' : 'blue'}>
+        {line.replace(/^#+\s*/, '')}
+      </Text>
+    );
+  }
+
+  if (line.startsWith('> ')) {
+    return (
+      <Text color="gray">
+        │ {renderInline(line.slice(2))}
+      </Text>
+    );
+  }
+
+  if (/^(\-|\*)\s+/.test(line)) {
+    return <Text>{['• ', ...renderInline(line.replace(/^(\-|\*)\s+/, ''))]}</Text>;
+  }
+
+  if (/^\d+\.\s+/.test(line)) {
+    const marker = line.match(/^\d+\./)?.[0] ?? '1.';
+    return <Text>{[`${marker} `, ...renderInline(line.replace(/^\d+\.\s+/, ''))]}</Text>;
+  }
+
+  return <Text>{renderInline(line)}</Text>;
 }
 
 type Block =

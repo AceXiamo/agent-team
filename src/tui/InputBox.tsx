@@ -7,19 +7,37 @@ interface InputBoxProps {
   input: string;
   suggestions: AgentName[];
   selectedSuggestion: number;
+  activeSuggestion: AgentName | null;
+  submitting: boolean;
 }
 
-export function InputBox({ input, suggestions, selectedSuggestion }: InputBoxProps): React.JSX.Element {
+export function InputBox({
+  input,
+  suggestions,
+  selectedSuggestion,
+  activeSuggestion,
+  submitting
+}: InputBoxProps): React.JSX.Element {
+  const hint =
+    suggestions.length > 0
+      ? `target preview: @${capitalize(activeSuggestion ?? suggestions[0]!)}`
+      : 'Enter sends • Tab completes mention • Empty Enter toggles focused tool details';
+
   return (
-    <Box flexDirection="column" borderStyle="round" paddingX={1}>
+    <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1}>
+      <Box justifyContent="space-between">
+        <Text bold color="yellow">
+          Composer
+        </Text>
+        <Text dimColor>{submitting ? 'dispatching...' : `${input.length} chars`}</Text>
+      </Box>
       <Text>{`> ${input || '_'}`}</Text>
       {suggestions.length > 0 ? (
         <Text dimColor>
-          mention: {suggestions.map((agent, index) => (index === selectedSuggestion ? `[${capitalize(agent)}]` : capitalize(agent))).join(' ')}
+          mention {suggestions.map((agent, index) => (index === selectedSuggestion ? `[${capitalize(agent)}]` : capitalize(agent))).join(' ')}
         </Text>
-      ) : (
-        <Text dimColor>Enter sends. Tab completes mention. Up/Down selects message. Enter on empty input toggles tool details.</Text>
-      )}
+      ) : null}
+      <Text dimColor>{hint}</Text>
     </Box>
   );
 }

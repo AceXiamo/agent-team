@@ -23,10 +23,12 @@ describe('DelegationParser', () => {
     expect(result.requests).toEqual([]);
   });
 
-  it('rejects invalid targets', () => {
+  it('treats invalid targets as plain text instead of delegation errors', () => {
     const parser = new DelegationParser();
     const result = parser.consume('```agent-team\n{"action":"delegate","target":"ghost","message":"x"}\n```');
 
-    expect(result.errors).toEqual(['Ignored invalid delegate request block.']);
+    expect(result.requests).toEqual([]);
+    expect(result.errors).toEqual([]);
+    expect(result.displayText).toBe('```agent-team\n{"action":"delegate","target":"ghost","message":"x"}\n```');
   });
 });
