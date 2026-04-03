@@ -9,12 +9,20 @@ export interface SendOptions {
   runId: string;
 }
 
+export interface TokenUsage {
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
+}
+
 export type AgentEvent =
   | { type: 'text'; content: string }
   | { type: 'thinking'; content: string }
   | { type: 'tool_use'; tool: string; input: unknown }
   | { type: 'tool_result'; tool: string; output: string }
   | { type: 'delegate_request'; target: AgentName; message: string }
+  | { type: 'usage'; usage: TokenUsage }
   | { type: 'done'; sessionId: string }
   | { type: 'error'; message: string };
 
@@ -76,6 +84,7 @@ export interface Message {
   content: MessageContent[];
   timestamp: Date;
   status: 'streaming' | 'done' | 'error';
+  usage?: TokenUsage;
 }
 
 export interface AgentState {
@@ -100,6 +109,7 @@ export interface PersistedMessage {
   content: MessageContent[];
   timestamp: string;
   status: Message['status'];
+  usage?: TokenUsage;
 }
 
 export interface DelegateRequest {

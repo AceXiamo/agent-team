@@ -1,6 +1,6 @@
 import type { SendOptions } from '../types.js';
 import type { AgentEvent } from '../types.js';
-import { BaseJsonlDriver } from './base.js';
+import { BaseJsonlDriver, extractUsage } from './base.js';
 
 export class CodexDriver extends BaseJsonlDriver {
   readonly name = 'codex';
@@ -19,9 +19,7 @@ export class CodexDriver extends BaseJsonlDriver {
         opts.sessionId,
         opts.prompt,
         '--json',
-        '--dangerously-bypass-approvals-and-sandbox',
-        '-C',
-        opts.workdir
+        '--dangerously-bypass-approvals-and-sandbox'
       ];
     }
 
@@ -61,7 +59,12 @@ export class CodexDriver extends BaseJsonlDriver {
       return mapEventMessage(record.payload);
     }
 
-    if (type === 'turn.started' || type === 'turn.completed' || type === 'turn_context') {
+    if (type === 'turn.completed') {
+      const usage = extractUsage(record);
+      return usage ? [{ type: 'usage', usage }] : [];
+    }
+
+    if (type === 'turn.started' || type === 'turn_context') {
       return [];
     }
 

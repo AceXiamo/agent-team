@@ -2,7 +2,7 @@ import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import type { Readable } from 'node:stream';
 import readline from 'node:readline';
 
-import type { AgentDriver, AgentEvent, SendOptions } from '../types.js';
+import type { AgentDriver, AgentEvent, SendOptions, TokenUsage } from '../types.js';
 
 class AsyncEventQueue<T> implements AsyncIterable<T> {
   private items: T[] = [];
@@ -198,7 +198,15 @@ export abstract class BaseJsonlDriver implements AgentDriver {
         return [{ type: 'error', message: getString(source.error) ?? 'Unknown driver error.' }];
       }
 
-      return sessionId ? [{ type: 'done', sessionId }] : [];
+      const events: AgentEvent[] = [];
+      const usage = extractUsage(source);
+      if (usage) {
+        events.push({ type: 'usage', usage });
+      }
+      if (sessionId) {
+        events.push({ type: 'done', sessionId });
+      }
+      return events;
     }
 
     if (type === 'done' || type === 'completed') {
@@ -322,4 +330,20 @@ function maybeParseJson(value: unknown): unknown {
   } catch {
     return value;
   }
+}
+
+export function extractUsage(source: Record<string, unknown>): TokenUsage | null {
+  const raw = isRecord(source.usage) ? source.usage : null;
+  if (!raw) {
+    const costUsd = typeof source.cost_usd === 'number' ? source.cost_usd : undefined;
+    return costUsd !== undefined ? { costUsd } : null;
+  }
+
+  const usage: TokenUsage = {};
+  if (typeof raw.input_tokens === 'number') usage.inputTokens = raw.input_tokens;
+  if (typeof raw.cached_input_tokens === 'number') usage.cachedInputTokens = raw.cached_input_tokens;
+  if (typeof raw.output_tokens === 'number') usage.outputTokens = raw.output_tokens;
+  if (typeof source.cost_usd === 'number') usage.costUsd = source.cost_usd;
+
+  return Object.keys(usage).length > 0 ? usage : null;
 }

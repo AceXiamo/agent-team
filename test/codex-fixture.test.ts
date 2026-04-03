@@ -19,7 +19,8 @@ describe('Codex JSONL fixture parsing', () => {
 
     expect(events).toEqual<AgentEvent[]>([
       { type: 'done', sessionId: '019d535e-28fd-7c52-ad74-b71bf824d67e' },
-      { type: 'text', content: 'Hey. What do you need?' }
+      { type: 'text', content: 'Hey. What do you need?' },
+      { type: 'usage', usage: { inputTokens: 14344, cachedInputTokens: 5504, outputTokens: 62 } }
     ]);
   });
 });

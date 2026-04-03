@@ -5,7 +5,7 @@ import { MessageLogStore, SessionStore } from './persistence.js';
 import { createEmptyAgentState, createId, hashWorkdir, AGENTS } from './utils.js';
 import { DriverRegistry } from './registry.js';
 
-import type { AgentName, AppState, Message, MessageContent, Sender } from '../types.js';
+import type { AgentName, AppState, Message, MessageContent, Sender, TokenUsage } from '../types.js';
 
 interface PendingTask {
   runId: string;
@@ -246,6 +246,9 @@ export class MessageRouter {
           case 'delegate_request':
             this.handleDelegateRequest(task.target, event.target, event.message);
             break;
+          case 'usage':
+            this.mergeUsage(message.id, event.usage);
+            break;
           case 'done':
             agentState.sessionId = event.sessionId;
             await this.sessionStore.set(this.workdirHash, task.target, event.sessionId);
@@ -385,6 +388,24 @@ export class MessageRouter {
     }
     message.status = status;
     this.schedulePersist();
+  }
+
+  private mergeUsage(messageId: string, incoming: TokenUsage): void {
+    const message = this.state.messages.find((item) => item.id === messageId);
+    if (!message) {
+      return;
+    }
+
+    const prev = message.usage ?? {};
+    message.usage = {
+      inputTokens: (prev.inputTokens ?? 0) + (incoming.inputTokens ?? 0) || undefined,
+      cachedInputTokens: (prev.cachedInputTokens ?? 0) + (incoming.cachedInputTokens ?? 0) || undefined,
+      outputTokens: (prev.outputTokens ?? 0) + (incoming.outputTokens ?? 0) || undefined,
+      costUsd: (prev.costUsd ?? 0) + (incoming.costUsd ?? 0) || undefined
+    };
+
+    this.schedulePersist();
+    this.emit();
   }
 
   private emit(): void {

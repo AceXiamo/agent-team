@@ -26,9 +26,7 @@ describe('driver argument builders', () => {
       'sess',
       'follow-up',
       '--json',
-      '--dangerously-bypass-approvals-and-sandbox',
-      '-C',
-      '/tmp'
+      '--dangerously-bypass-approvals-and-sandbox'
     ]);
   });
 
