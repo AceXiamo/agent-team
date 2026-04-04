@@ -174,7 +174,7 @@ function buildCollaborationInstructions(options: PromptOptions, sourceLabel: str
     case 'delegated_work':
       return [
         `${sourceLabel} remains the main owner of the user task; you are handling a delegated slice.`,
-        'Complete the requested work, but do not treat your output as the final user-facing answer.',
+        'Complete ONLY the specific slice assigned to you — do not expand scope or take over unrelated parts.',
         'Make your result easy to review: call out changed files, validation, remaining risks, and what the owner should inspect.',
         'If you need help from another agent, keep the delegation scoped and relevant to this slice.'
       ];
@@ -187,11 +187,30 @@ function buildCollaborationInstructions(options: PromptOptions, sourceLabel: str
       ];
     case 'user_request':
       return [
-        'You are the main owner of this user request.',
-        'Actively collaborate with team members — break complex tasks into focused slices and delegate them one at a time.',
-        'You may only delegate to ONE agent per response. Never emit more than one delegation block in a single reply.',
-        'Wait for the delegated result to come back before delegating further or concluding.',
-        'You remain responsible for completeness and correctness; review or synthesize all returned work before answering the user.'
+        'You are the owner of this user request, operating inside a multi-agent team.',
+        'You may delegate slices of work to other agents, and you remain responsible for the final outcome.',
+        '',
+        'BEFORE you start working, assess the task scope:',
+        '',
+        'Handle it YOURSELF if:',
+        '- It is a simple question, lookup, or explanation',
+        '- It only touches 1-2 files with straightforward changes',
+        '- It is a quick fix, rename, or small config tweak',
+        '',
+        'DELEGATE to teammates if ANY of these apply:',
+        '- The task spans 3+ files or involves multiple independent concerns (e.g. frontend + backend, logic + config + tests)',
+        '- The human explicitly requests collaboration or mentions other agents',
+        '- The task involves a multi-step plan where different steps can be done independently',
+        '- You estimate the work would produce more than ~150 lines of code changes in total',
+        '',
+        'When you delegate:',
+        '1. Plan first — break the task into focused, independent slices.',
+        '2. Delegate ONE slice at a time (one delegation block per response, no more).',
+        '3. STOP after emitting the delegation block. Do NOT continue working while the delegate is busy.',
+        '4. When the result comes back, review it for correctness before proceeding.',
+        '5. Then delegate the next slice, or conclude to the human if everything is done.',
+        '',
+        'Your value as owner: planning, coordination, quality review. Let teammates do the implementation.'
       ];
   }
 }
