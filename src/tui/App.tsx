@@ -23,6 +23,10 @@ export function App({ router }: AppProps): React.JSX.Element {
   const { exit } = useApp();
   const { stdin } = useStdin();
   const [state, setState] = useState<AppState>(router.getState());
+  const [viewport, setViewport] = useState(() => ({
+    cols: process.stdout.columns ?? 80,
+    rows: process.stdout.rows ?? 24
+  }));
   const [input, setInput] = useState('');
   const [cursor, setCursor] = useState(0);
   const [terminalFocused, setTerminalFocused] = useState(true);
@@ -65,6 +69,23 @@ export function App({ router }: AppProps): React.JSX.Element {
       process.stdout.write('\u001b[?1004l');
     };
   }, [stdin]);
+
+  useEffect(() => {
+    const handleResize = (): void => {
+      setViewport((current) => {
+        const next = {
+          cols: process.stdout.columns ?? 80,
+          rows: process.stdout.rows ?? 24
+        };
+        return current.cols === next.cols && current.rows === next.rows ? current : next;
+      });
+    };
+
+    process.stdout.on('resize', handleResize);
+    return () => {
+      process.stdout.off('resize', handleResize);
+    };
+  }, []);
 
   useEffect(() => {
     const currentLastId = state.messages.at(-1)?.id ?? null;
@@ -365,8 +386,8 @@ export function App({ router }: AppProps): React.JSX.Element {
     }
   });
 
-  const cols = process.stdout.columns ?? 80;
-  const rows = process.stdout.rows ?? 24;
+  const cols = viewport.cols;
+  const rows = viewport.rows;
   const sidebarWidth = Math.max(30, Math.min(44, Math.floor(cols * 0.3)));
 
   return (
