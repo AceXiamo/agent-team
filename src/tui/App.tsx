@@ -8,7 +8,9 @@ import { ContextPanel } from './ContextPanel.js';
 import { Header } from './Header.js';
 import { InputBox } from './InputBox.js';
 import { MessageStream, type MessageStreamHandle } from './MessageStream.js';
+import { SearchBar } from './SearchBar.js';
 import { StatusBar } from './StatusBar.js';
+import { messageMatchesQuery } from './search.js';
 import { MessageRouter } from '../core/router.js';
 
 const SCROLL_LINES = 3;
@@ -27,6 +29,9 @@ export function App({ router }: AppProps): React.JSX.Element {
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(state.messages.at(-1)?.id ?? null);
   const [selectedSuggestion, setSelectedSuggestion] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [searchMode, setSearchMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchCursor, setSearchCursor] = useState(0);
   const previousLastMessageId = useRef<string | null>(state.messages.at(-1)?.id ?? null);
   const messageStreamRef = useRef<MessageStreamHandle>(null);
 
@@ -113,6 +118,28 @@ export function App({ router }: AppProps): React.JSX.Element {
     [state.messages]
   );
 
+  const filteredMessages = useMemo(() => {
+    if (!searchMode || !searchQuery.trim()) return state.messages;
+    return state.messages.filter((msg) => messageMatchesQuery(msg, searchQuery));
+  }, [state.messages, searchMode, searchQuery]);
+
+  useEffect(() => {
+    if (!searchMode) {
+      return;
+    }
+
+    if (filteredMessages.length === 0) {
+      if (selectedMessageId !== null) {
+        setSelectedMessageId(null);
+      }
+      return;
+    }
+
+    if (!selectedMessageId || !filteredMessages.some((message) => message.id === selectedMessageId)) {
+      setSelectedMessageId(filteredMessages[0]?.id ?? null);
+    }
+  }, [filteredMessages, searchMode, selectedMessageId]);
+
   const shouldAnimate = terminalFocused && (submitting || liveCount > 0 || activeAgentCount > 0);
 
   const pendingReviewCount = useMemo(() =>
@@ -128,7 +155,7 @@ export function App({ router }: AppProps): React.JSX.Element {
   );
 
   const selectedIndex = selectedMessageId
-    ? state.messages.findIndex((m) => m.id === selectedMessageId)
+    ? filteredMessages.findIndex((m) => m.id === selectedMessageId)
     : -1;
 
   useInput((value, key) => {
@@ -145,6 +172,99 @@ export function App({ router }: AppProps): React.JSX.Element {
       return;
     }
 
+    // Enter / exit search mode
+    if (key.ctrl && value === 'f') {
+      if (!searchMode) {
+        setSearchMode(true);
+        setSearchQuery('');
+        setSearchCursor(0);
+      }
+      return;
+    }
+
+    // ── Search mode key handling ──────────────────────────────────────────
+    if (searchMode) {
+      if (key.escape) {
+        setSearchMode(false);
+        setSearchQuery('');
+        setSearchCursor(0);
+        setSelectedMessageId((current) => current ?? state.messages.at(-1)?.id ?? null);
+        return;
+      }
+
+      if (key.upArrow || key.downArrow) {
+        messageStreamRef.current?.scrollBy(key.upArrow ? -SCROLL_LINES : SCROLL_LINES);
+        return;
+      }
+
+      if (key.ctrl && value === 'p') { navigateSelection(-1); return; }
+      if (key.ctrl && value === 'n') { navigateSelection(1); return; }
+      if (key.ctrl && value === 'l') {
+        setSelectedMessageId(filteredMessages.at(-1)?.id ?? null);
+        return;
+      }
+
+      if (key.return) {
+        if (selectedMessageId) {
+          router.toggleMessageExpansion(selectedMessageId);
+        }
+        return;
+      }
+
+      if (key.leftArrow) {
+        if (key.meta || key.ctrl) {
+          setSearchCursor(0);
+        } else {
+          setSearchCursor((c) => Math.max(0, c - 1));
+        }
+        return;
+      }
+      if (key.rightArrow) {
+        if (key.meta || key.ctrl) {
+          setSearchCursor(searchQuery.length);
+        } else {
+          setSearchCursor((c) => Math.min(searchQuery.length, c + 1));
+        }
+        return;
+      }
+      if (key.ctrl && value === 'a') { setSearchCursor(0); return; }
+      if (key.ctrl && value === 'e') { setSearchCursor(searchQuery.length); return; }
+      if (key.ctrl && value === 'u') {
+        setSearchQuery((q) => { const next = q.slice(searchCursor); setSearchCursor(0); return next; });
+        return;
+      }
+      if (key.ctrl && value === 'k') {
+        setSearchQuery((q) => q.slice(0, searchCursor));
+        return;
+      }
+      if (key.ctrl && value === 'w') {
+        setSearchQuery((q) => {
+          const before = q.slice(0, searchCursor);
+          const after = q.slice(searchCursor);
+          const trimmed = before.replace(/\S+\s*$/, '');
+          setSearchCursor(trimmed.length);
+          return trimmed + after;
+        });
+        return;
+      }
+      if (key.backspace || key.delete) {
+        if (searchCursor <= 0) return;
+        setSearchQuery((q) => q.slice(0, searchCursor - 1) + q.slice(searchCursor));
+        setSearchCursor((c) => c - 1);
+        return;
+      }
+      if (!key.ctrl && !key.meta && value) {
+        setSearchQuery((q) => {
+          const next = q.slice(0, searchCursor) + value + q.slice(searchCursor);
+          setSearchCursor((c) => c + value.length);
+          return next;
+        });
+        return;
+      }
+      return;
+    }
+
+    // ── Normal mode key handling ──────────────────────────────────────────
     if (key.ctrl && value === 'p') { navigateSelection(-1); return; }
     if (key.ctrl && value === 'n') { navigateSelection(1); return; }
     if (key.ctrl && value === 'l') { setSelectedMessageId(state.messages.at(-1)?.id ?? null); return; }
@@ -252,9 +372,17 @@ export function App({ router }: AppProps): React.JSX.Element {
   return (
     <Box flexDirection="row" width={cols} height={rows} overflow="hidden">
       <Box flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden">
-        <MessageStream ref={messageStreamRef} messages={state.messages} selectedMessageId={selectedMessageId} shouldAnimate={shouldAnimate} />
+        <MessageStream
+          ref={messageStreamRef}
+          messages={filteredMessages}
+          selectedMessageId={selectedMessageId}
+          shouldAnimate={shouldAnimate}
+          searchMode={searchMode}
+          searchQuery={searchQuery}
+          totalMessages={state.messages.length}
+        />
         <StatusBar
-          messageCount={state.messages.length}
+          messageCount={filteredMessages.length}
           selectedIndex={selectedIndex}
           runningAgents={runningAgents}
           queuedCount={queuedCount}
@@ -264,17 +392,26 @@ export function App({ router }: AppProps): React.JSX.Element {
           liveCount={liveCount}
           shouldAnimate={shouldAnimate}
         />
-        <InputBox
-          input={input}
-          cursor={cursor}
-          suggestions={suggestions}
-          selectedSuggestion={selectedSuggestion}
-          activeSuggestion={activeSuggestion}
-          submitting={submitting}
-          targetAgent={targetAgent}
-          agentStates={state.agents}
-          shouldAnimate={shouldAnimate}
-        />
+        {searchMode ? (
+          <SearchBar
+            query={searchQuery}
+            cursor={searchCursor}
+            matchCount={filteredMessages.length}
+            totalCount={state.messages.length}
+          />
+        ) : (
+          <InputBox
+            input={input}
+            cursor={cursor}
+            suggestions={suggestions}
+            selectedSuggestion={selectedSuggestion}
+            activeSuggestion={activeSuggestion}
+            submitting={submitting}
+            targetAgent={targetAgent}
+            agentStates={state.agents}
+            shouldAnimate={shouldAnimate}
+          />
+        )}
       </Box>
       <Box flexDirection="column" width={sidebarWidth} flexShrink={0} overflow="hidden">
         <Header
@@ -293,15 +430,16 @@ export function App({ router }: AppProps): React.JSX.Element {
   );
 
   function navigateSelection(delta: number): void {
-    if (state.messages.length === 0) {
+    const pool = searchMode ? filteredMessages : state.messages;
+    if (pool.length === 0) {
       return;
     }
 
     const currentIndex = selectedMessageId
-      ? state.messages.findIndex((message) => message.id === selectedMessageId)
-      : state.messages.length - 1;
-    const nextIndex = Math.min(state.messages.length - 1, Math.max(0, currentIndex + delta));
-    setSelectedMessageId(state.messages[nextIndex]?.id ?? null);
+      ? pool.findIndex((message) => message.id === selectedMessageId)
+      : pool.length - 1;
+    const nextIndex = Math.min(pool.length - 1, Math.max(0, currentIndex + delta));
+    setSelectedMessageId(pool[nextIndex]?.id ?? null);
   }
 
   async function submitInput(): Promise<void> {

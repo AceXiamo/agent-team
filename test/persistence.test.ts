@@ -121,4 +121,39 @@ describe('persistence', () => {
     expect(await store.load('hash-1', 'session-a')).toEqual(messages);
     expect(await store.load('hash-1', 'session-b')).toEqual([]);
   });
+
+  it('defaults legacy thinking and delegate blocks to collapsed when loading messages', async () => {
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-team-'));
+    tempDirs.push(baseDir);
+    const store = new MessageLogStore(baseDir);
+    const messagesDir = path.join(baseDir, 'messages');
+    await fs.mkdir(messagesDir, { recursive: true });
+    await fs.writeFile(
+      path.join(messagesDir, 'hash-1_session-a.jsonl'),
+      `${JSON.stringify({
+        id: 'legacy',
+        sender: 'codex',
+        timestamp: '2026-04-03T00:00:00.000Z',
+        status: 'done',
+        content: [
+          { type: 'thinking', text: 'legacy reasoning' },
+          { type: 'delegate', target: 'kimi', message: 'legacy delegation' }
+        ]
+      })}\n`,
+      'utf8'
+    );
+
+    await expect(store.load('hash-1', 'session-a')).resolves.toEqual([
+      {
+        id: 'legacy',
+        sender: 'codex',
+        timestamp: new Date('2026-04-03T00:00:00.000Z'),
+        status: 'done',
+        content: [
+          { type: 'thinking', text: 'legacy reasoning', collapsed: true },
+          { type: 'delegate', target: 'kimi', message: 'legacy delegation', collapsed: true }
+        ]
+      }
+    ]);
+  });
 });

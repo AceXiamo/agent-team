@@ -189,6 +189,15 @@ function serializeMessage(message: Message): PersistedMessage {
 function deserializeMessage(message: PersistedMessage): Message {
   return {
     ...message,
+    content: message.content.map((content) => {
+      if (content.type === 'thinking') {
+        return { ...content, collapsed: content.collapsed ?? true };
+      }
+      if (content.type === 'delegate') {
+        return { ...content, collapsed: content.collapsed ?? true };
+      }
+      return content;
+    }),
     timestamp: new Date(message.timestamp)
   };
 }

@@ -14,10 +14,13 @@ interface MessageStreamProps {
   messages: Message[];
   selectedMessageId: string | null;
   shouldAnimate: boolean;
+  searchMode?: boolean;
+  searchQuery?: string;
+  totalMessages?: number;
 }
 
 export const MessageStream = React.forwardRef<MessageStreamHandle, MessageStreamProps>(
-  function MessageStream({ messages, selectedMessageId, shouldAnimate }, ref) {
+  function MessageStream({ messages, selectedMessageId, shouldAnimate, searchMode, searchQuery, totalMessages }, ref) {
   const scrollRef = useRef<ScrollViewRef>(null);
   const liveCount = messages.filter((message) => message.status === 'streaming').length;
   const uiBeat = useAnimationBeat(shouldAnimate && liveCount > 0);
@@ -27,6 +30,10 @@ export const MessageStream = React.forwardRef<MessageStreamHandle, MessageStream
 
   const focusLabel =
     selectedIndex === -1 || messages.length === 0 ? 'focus tail' : `focus ${selectedIndex + 1}/${messages.length}`;
+
+  const headerRight = searchMode && searchQuery
+    ? `filter "${searchQuery}" • ${messages.length}/${totalMessages ?? messages.length} match${messages.length !== 1 ? 'es' : ''} • ${focusLabel}`
+    : `${totalMessages ?? messages.length} msgs • ${focusLabel} • ${liveCount > 0 ? `${liveCount} live` : 'idle'}`;
 
   const autoScrollRef = useRef(true);
 
@@ -76,16 +83,20 @@ export const MessageStream = React.forwardRef<MessageStreamHandle, MessageStream
   }), []);
 
   return (
-    <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor="blue" paddingX={1} overflow="hidden">
+    <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={searchMode ? 'yellow' : 'blue'} paddingX={1} overflow="hidden">
       <Box justifyContent="space-between">
-        <Text bold color="blue">
-          {pulse(uiBeat)} Conversation
+        <Text bold color={searchMode ? 'yellow' : 'blue'}>
+          {searchMode ? '/' : pulse(uiBeat)} {searchMode ? 'Search' : 'Conversation'}
         </Text>
         <Text dimColor wrap="truncate">
-          {messages.length} msgs • {focusLabel} • {liveCount > 0 ? `${liveCount} live` : 'idle'}
+          {headerRight}
         </Text>
       </Box>
-      {messages.length === 0 ? (
+      {messages.length === 0 && searchMode ? (
+        <Box flexDirection="column" marginTop={1}>
+          <Text dimColor>No messages match the current filter.</Text>
+        </Box>
+      ) : messages.length === 0 ? (
         <EmptyState />
       ) : (
         <ScrollView ref={scrollRef} flexGrow={1} flexDirection="column" onScroll={handleScroll}>

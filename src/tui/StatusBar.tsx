@@ -72,6 +72,7 @@ function KeyHints(): React.JSX.Element {
       <KeyBadge k="^L" desc="jump to latest" color="cyan" />
       <KeyBadge k="Enter" desc="send / expand" color="green" />
       <KeyBadge k="Tab" desc="@mention" color="yellow" />
+      <KeyBadge k="^F" desc="search" color="yellow" />
       <KeyBadge k="Esc" desc="clear" color="gray" />
       <KeyBadge k="^C" desc="stop / quit" color="red" />
       <KeyBadge k="/new" desc="session" color="magenta" />

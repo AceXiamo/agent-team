@@ -58,12 +58,14 @@ export interface TextContent {
 export interface ThinkingContent {
   type: 'thinking';
   text: string;
+  collapsed: boolean;
 }
 
 export interface DelegateContent {
   type: 'delegate';
   target: AgentName;
   message: string;
+  collapsed: boolean;
 }
 
 export interface SystemContent {

@@ -243,7 +243,7 @@ export class MessageRouter {
     this.state.messages[index] = {
       ...message,
       content: message.content.map((content) => {
-        if (content.type === 'tool_use' || content.type === 'tool_result') {
+        if (content.type === 'tool_use' || content.type === 'tool_result' || content.type === 'thinking' || content.type === 'delegate') {
           return { ...content, collapsed: !content.collapsed };
         }
         return content;
@@ -352,7 +352,7 @@ export class MessageRouter {
             break;
           }
           case 'thinking':
-            this.pushContent(message.id, { type: 'thinking', text: event.content });
+            this.pushContent(message.id, { type: 'thinking', text: event.content, collapsed: true });
             break;
           case 'tool_use':
             this.pushContent(message.id, {
@@ -521,7 +521,7 @@ export class MessageRouter {
       sender: 'system',
       timestamp: new Date(),
       status: 'done',
-      content: [{ type: 'delegate', target, message: `${source} delegated: ${message}` }]
+      content: [{ type: 'delegate', target, message: `${source} delegated: ${message}`, collapsed: true }]
     });
 
     const dispatchError = this.getAgentDispatchError(target);

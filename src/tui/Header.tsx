@@ -94,10 +94,17 @@ function AgentPill({ agent, uiBeat }: { agent: AgentState; uiBeat: number }): Re
   ].filter(Boolean).join(' • ');
 
   return (
-    <Box>
-      <Text color={color}>{`${dot}${shortName}`}</Text>
-      <Text dimColor>{` ${stateLabel}`}</Text>
-      {extra ? <Text dimColor>{` • ${extra}`}</Text> : null}
+    <Box flexDirection="column">
+      <Box>
+        <Text color={color}>{`${dot}${shortName}`}</Text>
+        <Text dimColor>{` ${stateLabel}`}</Text>
+        {extra ? <Text dimColor>{` • ${extra}`}</Text> : null}
+      </Box>
+      {agent.status === 'error' && agent.lastError ? (
+        <Text color="red" wrap="truncate">
+          {`  ▲ ${truncateError(agent.lastError)}`}
+        </Text>
+      ) : null}
     </Box>
   );
 }
@@ -114,6 +121,11 @@ function shortId(value: string): string {
 
 function shortModel(value: string): string {
   return value.length > 16 ? `${value.slice(0, 13)}…` : value;
+}
+
+function truncateError(value: string): string {
+  const singleLine = value.replace(/\s+/g, ' ').trim();
+  return singleLine.length > 60 ? `${singleLine.slice(0, 57)}...` : singleLine;
 }
 
 function getAgentColor(agent: AgentState): string {

@@ -64,9 +64,14 @@ function ContentBlock({ content }: { content: MessageContent }): React.JSX.Eleme
       return <MarkdownText text={content.text} />;
     case 'thinking':
       return (
-        <Text dimColor>
-          · {content.text}
-        </Text>
+        <CollapsibleBlock
+          color="gray"
+          icon={content.collapsed ? '▸' : '▾'}
+          label="thinking"
+          summary={`${content.text.length} chars`}
+          collapsed={content.collapsed}
+          body={content.text}
+        />
       );
     case 'tool_use':
       return (
@@ -92,9 +97,14 @@ function ContentBlock({ content }: { content: MessageContent }): React.JSX.Eleme
       );
     case 'delegate':
       return (
-        <Text color="cyan">
-          → delegated to {content.target}: {content.message}
-        </Text>
+        <CollapsibleBlock
+          color="cyan"
+          icon={content.collapsed ? '▸' : '▾'}
+          label={`delegated to ${content.target}`}
+          summary={`${content.message.length} chars`}
+          collapsed={content.collapsed}
+          body={content.message}
+        />
       );
     case 'system':
       return (
@@ -103,6 +113,38 @@ function ContentBlock({ content }: { content: MessageContent }): React.JSX.Eleme
         </Text>
       );
   }
+}
+
+function CollapsibleBlock({
+  body,
+  collapsed,
+  color,
+  icon,
+  label,
+  summary
+}: {
+  body: string;
+  collapsed: boolean;
+  color: string;
+  icon: string;
+  label: string;
+  summary: string;
+}): React.JSX.Element {
+  return (
+    <Box flexDirection="column">
+      <Text color={color}>
+        {icon} {label}
+        {collapsed && summary ? <Text dimColor>{` • ${summary}`}</Text> : null}
+      </Text>
+      {!collapsed ? (
+        <Box marginLeft={2} flexDirection="column">
+          {body.split('\n').map((line, index) => (
+            <Text key={index} dimColor>{line}</Text>
+          ))}
+        </Box>
+      ) : null}
+    </Box>
+  );
 }
 
 function ToolBlock({
